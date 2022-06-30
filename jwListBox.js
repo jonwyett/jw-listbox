@@ -1,6 +1,8 @@
 /*
 ver 5.2.0 2022-06-30
     -added ability to show table headers (column names)
+        -headers also emit when clicked
+    -added externalEmit
     -added showDebug to Options
 ver 5.1.0 2022-04-26
     -updated RemoveFormat to actually remove the format from the table
@@ -2517,6 +2519,7 @@ function jwListBox(_Name, _Parent) {
 
 
 //This adds a function to the jQuery object that supports scrolling to a particular element
+//note that the JQuery library must be loaded before jwListBox for this to work... I think...
 
 $.fn.scrollTo = function(elem, speed) { 
     $(this).animate({
