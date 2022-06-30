@@ -864,13 +864,31 @@ function jwListBox(_Name, _Parent) {
         var columnName = '';
         $("#" + _Options.name + " thead th").remove(); //remove any header information   
         
+        var emitData = [];
+        
         //re-add the headers
         for (var i=0; i<_Options.fieldNames.length; i++) {
-            if (_Options.showTableHeaders) { columnName = _Options.fieldNames[i]; }
+            columnID = _Options.name + '-col'+ i;
+            if (_Options.showTableHeaders) { 
+                columnName = _Options.fieldNames[i];
+                emitData.push({column: i, name: columnName});
+            }
             $('#' + _Options.name + " > thead").append(
                 "<th class='jwlb-th' id='jwlb-col" + i + "'>" + columnName + "</th>"
-            );
-        }         
+            );    
+        } 
+
+        //add the emitters if the headers are shown
+        if (_Options.showTableHeaders) { 
+            emitData.forEach(function(header) {
+                $('#jwlb-col' + header.column).on('click', function () { 
+                    _Self.externalEmit('headerClick', {
+                        column: header.column,
+                        name: header.name
+                    });
+                });   
+            });       
+        }
     }
 
     function sortBy(Field, Reverse, Primer) {
@@ -1137,7 +1155,10 @@ function jwListBox(_Name, _Parent) {
         }
         var HTML = '';
         var PK = null;
-        
+        var rowName = '';
+        //this holds the names and PK's of all the row elements we are creating
+        var eventElements = []; 
+
         for (var row=0; row<Data.length; row++) {
             /* this looks like:
                 <tr 
@@ -1148,13 +1169,23 @@ function jwListBox(_Name, _Parent) {
                 >
             */    
 
+            //get the Pk
             PK = Data[row][0];
+            //create the row name
+            rowName = _Options.name + '-' + PK;
+
+            //add the row element to the list
+            eventElements.push({name: '#' + rowName, PK: PK});
+
 
             //create the base row HTML
             if (!_Options.printMode) {
-            HTML += '<tr class="jwlb-tr" id="' + _Options.name + '-' + PK +
+                /*
+                HTML += '<tr class="jwlb-tr" id="' + _Options.name + '-' + PK +
                 '" onclick=' + _Options.name + ".click('" + PK +
                 "') ondblclick=" + _Options.name + ".dblclick('" + PK + "')>";
+                */
+                HTML += '<tr class="jwlb-tr" id="' + rowName + '">';
             } 
             /* This is removed as the clickToSelect flag should still fire a click event
             if (_Options.clickToSelect) {
@@ -1193,6 +1224,12 @@ function jwListBox(_Name, _Parent) {
             // @ts-ignore
             $("#" + _Options.name).append(HTML);    
         }
+
+        //Attach the event listners
+        eventElements.forEach(function(elem) {
+            $(elem.name).on('click', function () { _Self.click(elem.PK); });    
+        });
+
         
     }
 
@@ -2465,20 +2502,25 @@ function jwListBox(_Name, _Parent) {
         _Events[EventName] = Callback;
     };
 
+    this.externalEmit = function(EventName, Payload, Options) {
+        //you can fire an emitter manually if needed
+        //(this is actually needed by some on the internal event handlers as well)
+        emit(EventName, Payload, Options);
+    };
+
+    
+
 
     /******** END PUBLIC FUNCTIONS *************************************/
 
 } //END OF jwListBox
 
-/*
+
 //This adds a function to the jQuery object that supports scrolling to a particular element
-// @ts-ignore
-jQuery.fn.scrollTo = function(elem, speed) { 
-    // @ts-ignore
+
+$.fn.scrollTo = function(elem, speed) { 
     $(this).animate({
-        // @ts-ignore
         scrollTop:  $(this).scrollTop() - $(this).offset().top + $(elem).offset().top 
     }, speed === undefined ? 'fast' : speed); 
     return this; 
 };
-*/
