@@ -1,4 +1,7 @@
 /*
+ver 5.2.0 2022-06-30
+    -added ability to show table headers (column names)
+    -added showDebug to Options
 ver 5.1.0 2022-04-26
     -updated RemoveFormat to actually remove the format from the table
     -added ClearAllFormats
@@ -179,6 +182,7 @@ function jwListBox(_Name, _Parent) {
         sectionTemplate: '<div class="jwlistbox-section-header" style="text-align: left; font-weight:bold">@sectionName</div>',
         widths: [], //the widths of the columns,
         fieldNames: {}, //{column:name, column:name} --> {0:id, 1:firstName, 2:lastName}
+        showTableHeaders: false, //
         idField: null, //use id, ID or the first value/column
         sortField: null, //if supplied will auto-sort the list
         sortDESC: false, //used with sortField
@@ -189,6 +193,7 @@ function jwListBox(_Name, _Parent) {
         multiSelect: false, //to allow multi-select
         autoSelectFirst: true, //then this is true the first row will automatically be selected on a source or search
         formats: {}, //auto-formating rules
+        showDebug: false, //shows debugging info - requires a jwf.debug window be present
         printMode: false //when set to true the output will be suitible for printing, not as a listbox
     };
     /******** END DEFUALT OPTIONS *******************************************/
@@ -204,9 +209,9 @@ function jwListBox(_Name, _Parent) {
 
     /******** PRIVATE FUNCTONS *************************************/
     function debug(msg) {
-        // @ts-ignore
-        //jwf.debug(msg);
-        // @ts-ignore
+        if (_Options.showDebug) {
+            jwf.debug(msg);
+        }
         //window.parent.debug(msg);
     }
 
@@ -373,10 +378,17 @@ function jwListBox(_Name, _Parent) {
         //append some common styles. 
         // @ts-ignore
         $('body').append("<style> " +
-                ".jwlb-td-th{ " +
+                ".jwlb-td{ " +
                     "border-right: 1px solid #dddddd; " +
                     "text-align: left; " +
                     "padding: 2px; " +
+                    "overflow: hidden; " +
+                    "text-overflow: ellipsis; } " +
+                ".jwlb-th{ " +
+                    "font-weight: bold;" + 
+                    "border-right: 1px solid #dddddd; " +
+                    "text-align: left; " +
+                    "padding-left: 2px; " +
                     "overflow: hidden; " +
                     "text-overflow: ellipsis; } " +
                 ".jwlistbox-table { " + 
@@ -837,15 +849,6 @@ function jwListBox(_Name, _Parent) {
 
     function applyWidths(Widths) {
         //applies the widths to the table
-        
-        // @ts-ignore
-        $("#" + _Options.name + " thead th").remove(); //remove any header information
-        
-        //re-add the headers
-        for (var i=0; i<Widths.length; i++) {
-            // @ts-ignore
-            $('#' + _Options.name + " > thead").append("<th class='jwlb-td-th' id='jwlb-col" + i + "'></th>");
-        }
 
         //add the CSS to each header
         for (i=0; i<Widths.length; i++) {
@@ -855,6 +858,19 @@ function jwListBox(_Name, _Parent) {
                 "min-width": Widths[i]
             });
         }
+    }
+
+    function createTableHeader() {
+        var columnName = '';
+        $("#" + _Options.name + " thead th").remove(); //remove any header information   
+        
+        //re-add the headers
+        for (var i=0; i<_Options.fieldNames.length; i++) {
+            if (_Options.showTableHeaders) { columnName = _Options.fieldNames[i]; }
+            $('#' + _Options.name + " > thead").append(
+                "<th class='jwlb-th' id='jwlb-col" + i + "'>" + columnName + "</th>"
+            );
+        }         
     }
 
     function sortBy(Field, Reverse, Primer) {
@@ -1152,7 +1168,7 @@ function jwListBox(_Name, _Parent) {
             //now get the row itself either as table td's or a template
 
             if (_Options.rowTemplate) {
-                if (!_Options.printMode) { HTML += "<td class='jwlb-td-th'>"; } //only add table struture if not PrintMode
+                if (!_Options.printMode) { HTML += "<td class='jwlb-td'>"; } //only add table struture if not PrintMode
                 HTML += getRowHtmlAsTemplate(Data[row]); //get the row via the supplied template
                 if (!_Options.printMode) { HTML += "</td>"; }
             } else {
@@ -1189,8 +1205,8 @@ function jwListBox(_Name, _Parent) {
                     
         //iterate over each column in the row, skipping col 0 as that is the PK
         for (var col=1; col<RowData.length; col++) {
-            //<td class='jwlb-td-th'>Hello World</td>";
-            HTML += "<td class='jwlb-td-th'>" + RowData[col] + "</td>"; 
+            //<td class='jwlb-td'>Hello World</td>";
+            HTML += "<td class='jwlb-td'>" + RowData[col] + "</td>"; 
         }
 
         return HTML;
@@ -1582,6 +1598,8 @@ function jwListBox(_Name, _Parent) {
             debug('Setting default sort...');
             setDefaultSort(); //if the user supplied the options to sort this will do it
         }
+        debug('Creating Header...');
+        createTableHeader();
 
         debug('Drawing Rows...');
         drawRows(_Source.data);
@@ -2228,7 +2246,7 @@ function jwListBox(_Name, _Parent) {
         });
         delete _Options.formats[format];
       });
-    }
+    };
 
     this.Tag = function(RowIDs, Tag, Field, Remove, UseRowNumber) {
         //adds or removes a custom CSS class to the rows/fields provided
@@ -2452,7 +2470,7 @@ function jwListBox(_Name, _Parent) {
 
 } //END OF jwListBox
 
-
+/*
 //This adds a function to the jQuery object that supports scrolling to a particular element
 // @ts-ignore
 jQuery.fn.scrollTo = function(elem, speed) { 
@@ -2463,3 +2481,4 @@ jQuery.fn.scrollTo = function(elem, speed) {
     }, speed === undefined ? 'fast' : speed); 
     return this; 
 };
+*/
