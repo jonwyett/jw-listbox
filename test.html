@@ -1,12 +1,13 @@
 <html>
     <head>
-        <script type='text/javascript' src='jwf.js'></script>
-        <script src="jwListBox.js"></script>
         <script
             src="https://code.jquery.com/jquery-3.6.0.min.js"
             integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
             crossorigin="anonymous">
         </script>
+        <script type='text/javascript' src='jwf.js'></script>
+        <script src="jwListBox.js"></script>
+        
         <script>
             var data=[
                 [16,'Alice', true],
@@ -23,11 +24,18 @@
                     idField:'Name',
                     showTableHeaders:true,
                     autoSelectFirst:false,
-                    showDebug:true
+                    showDebug:false,
+                    clickOnCells:true
                 });
                 lst_Test.SetWidths(['48px']);
                 lst_Test.on('click', function(e) {
                     jwf.debug('Click:' + JSON.stringify(e));
+                });
+                lst_Test.on('headerClick', function(e) {
+                    jwf.debug('headerClicked: '+ JSON.stringify(e));
+                });
+                lst_Test.on('clickCell', function(e) {
+                    jwf.debug('Click Cell:' + JSON.stringify(e));
                 });
             });
         </script>
