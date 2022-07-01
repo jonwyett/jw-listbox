@@ -1,4 +1,6 @@
 /*
+ver 5.3.0 2022-07-01
+    --added clickOnCells
 ver 5.2.0 2022-06-30
     -added ability to show table headers (column names)
         -headers also emit when clicked
@@ -191,6 +193,7 @@ function jwListBox(_Name, _Parent) {
         //this tells the list box to treat mouse clicks and keypresses as a selection
         //it also auto-selects the first option in the list when the source is changed (new/sorted/limited)
         clickToSelect: true, //this will add code to the row so that clicking on it will select it
+        clickOnCells: false, //should each cell trigger click events
         autoSectionHide: true, //this will show/hide the sections when they are clicked on
         multiSelect: false, //to allow multi-select
         autoSelectFirst: true, //then this is true the first row will automatically be selected on a source or search
@@ -1158,8 +1161,10 @@ function jwListBox(_Name, _Parent) {
         var HTML = '';
         var PK = null;
         var rowName = '';
+        var cellElements = [];
         //this holds the names and PK's of all the row elements we are creating
         var eventElements = []; 
+        var rowInfo = {};
 
         for (var row=0; row<Data.length; row++) {
             /* this looks like:
@@ -1205,7 +1210,12 @@ function jwListBox(_Name, _Parent) {
                 HTML += getRowHtmlAsTemplate(Data[row]); //get the row via the supplied template
                 if (!_Options.printMode) { HTML += "</td>"; }
             } else {
-                HTML += getRowHtmlAsTDs(Data[row]); //get the row "as" a table structure    
+                rowInfo = getRowHtmlAsTDs(Data, row);
+                //store the element data in an array
+                rowInfo.IDs.forEach(function(elem) {
+                    cellElements.push(elem);
+                });
+                HTML += rowInfo.HTML; //get the row "as" a table structure    
             }
             //finalize the row
             HTML += "</tr>";
@@ -1227,28 +1237,42 @@ function jwListBox(_Name, _Parent) {
             $("#" + _Options.name).append(HTML);    
         }
 
-        //Attach the event listners
+        //Attach the event listners for each row
         eventElements.forEach(function(elem) {
             $(elem.name).on('click', function () { _Self.click(elem.PK); });    
         });
 
+        //attach event listeners for each cell  
+        if (_Options.clickOnCells) {
+             cellElements.forEach(function(elem) {
+                //debug('Attach listner to: ' + elem.name + '(' +  elem.row + ',' + elem.col + ')');
+                $('#' + elem.name).on('click', function () {
+                    _Self.clickCell(elem.row, elem.col);
+                });        
+            });
+        }
+
         
     }
 
-    function getRowHtmlAsTDs(RowData) {
+    function getRowHtmlAsTDs(data, row) {
         //returns html for a row in a <td> style
-
+        var rowData = data[row];
         var HTML = '';
+        row++; //so the rows a 1 based
         //the startcol is 1 because the 0th col is the PK   
         var startCol = 1;
-                    
+        var IDs = [];
+        var tdName = '';            
         //iterate over each column in the row, skipping col 0 as that is the PK
-        for (var col=1; col<RowData.length; col++) {
-            //<td class='jwlb-td'>Hello World</td>";
-            HTML += "<td class='jwlb-td'>" + RowData[col] + "</td>"; 
+        for (var col=1; col<rowData.length; col++) {
+            //<td class='jwlb-td id='jwlb-td(row,col)'>Hello World</td>";
+            tdName = "jwlb-td-" + row  + "-" + col;
+            IDs.push({name:tdName, row:row, col:col});
+            HTML += "<td class='jwlb-td' id='" + tdName + "'>" + rowData[col] + "</td>"; 
         }
 
-        return HTML;
+        return {IDs: IDs, HTML: HTML};
     }
 
     function getRowHtmlAsTemplate(RowData) {
@@ -2462,6 +2486,11 @@ function jwListBox(_Name, _Parent) {
         //TODO: if multiselect then wipe all and remove tags, set the new selected and tag to PK
 
         emit('dblclick', selected(), _Options.multiSelect);
+    };
+
+    this.clickCell = function(row, col) {
+        debug('---click cell (' + row + ',' + col + ')');
+        emit('clickCell', {row:row, col:col});
     };
 
     this.keyup = function(event) {

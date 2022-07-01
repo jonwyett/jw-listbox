@@ -24,7 +24,8 @@
                     idField:'Name',
                     showTableHeaders:true,
                     autoSelectFirst:false,
-                    showDebug:true
+                    showDebug:false,
+                    clickOnCells:true
                 });
                 lst_Test.SetWidths(['48px']);
                 lst_Test.on('click', function(e) {
@@ -32,6 +33,9 @@
                 });
                 lst_Test.on('headerClick', function(e) {
                     jwf.debug('headerClicked: '+ JSON.stringify(e));
+                });
+                lst_Test.on('clickCell', function(e) {
+                    jwf.debug('Click Cell:' + JSON.stringify(e));
                 });
             });
         </script>
