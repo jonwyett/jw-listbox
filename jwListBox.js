@@ -1,6 +1,9 @@
 /*
+ver 5.3.1 2022-07-07
+    -move applywidths out of !norebuild so you don't lose widths when
+        updating the source
 ver 5.3.0 2022-07-01
-    --added clickOnCells
+    -added clickOnCells
 ver 5.2.0 2022-06-30
     -added ability to show table headers (column names)
         -headers also emit when clicked
@@ -1635,8 +1638,6 @@ function jwListBox(_Name, _Parent) {
 
             debug('re-processing startup options');
             proccessOptions(Options); //use the existing options object
-            debug('Applying Widths...');
-            applyWidths(_Options.widths);
 
             debug('Reseting Source');
             resetSource(); //reset the source
@@ -1663,6 +1664,9 @@ function jwListBox(_Name, _Parent) {
         }
         debug('Creating Header...');
         createTableHeader();
+        
+        debug('Applying Widths...');
+        applyWidths(_Options.widths);
 
         debug('Drawing Rows...');
         drawRows(_Source.data);
