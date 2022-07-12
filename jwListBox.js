@@ -1,4 +1,8 @@
 /*
+ver 5.3.2 2022-07-12
+    -fixed bug in GetRowData
+    -fixed bug in GetFieldNames
+    -added more info to clickCell emit
 ver 5.3.1 2022-07-07
     -move applywidths out of !norebuild so you don't lose widths when
         updating the source
@@ -1729,8 +1733,8 @@ function jwListBox(_Name, _Parent) {
 
     this.GetFields = function() {
         //returns the field names as an array
-        
-        return _Source.fieldNames.slice(1, _Source.fieldNames.length);
+        var fieldNames = Object.keys(_Source.fieldNames);
+        return fieldNames.slice(1, fieldNames.length);
 
     };
 
@@ -2135,7 +2139,12 @@ function jwListBox(_Name, _Parent) {
         
         //the PK may be an ID or a row at first
         var PK = null;
-        if (!UseRow) { PK = getPK(ID); } //convert what should be an ID into a PK
+        //convert what should be an ID into a PK
+        if (UseRow) {
+            PK = ID;
+        } else {
+            PK = getPK(ID); 
+        } 
         
         //PK should either be a valid PK and UseRow=false, or a number and UseRow=true
         return getRowData(PK, Recordset, UseRow); 
@@ -2494,7 +2503,13 @@ function jwListBox(_Name, _Parent) {
 
     this.clickCell = function(row, col) {
         debug('---click cell (' + row + ',' + col + ')');
-        emit('clickCell', {row:row, col:col});
+        var data = {};
+        data.row = row;
+        data.col  = col;
+        data.field = _Self.GetFields()[col-1];
+        data.value = _Self.GetFieldValue(row-1, data.field, true);
+        data.rowData = _Self.GetRowData(row-1, true, true);
+        emit('clickCell', data);
     };
 
     this.keyup = function(event) {
