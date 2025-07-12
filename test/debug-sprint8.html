@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JwListBox Sprint 8 Test - Advanced Formatting</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .listbox-container {
+            height: 400px;
+            border: 1px solid #ccc;
+            margin: 20px 0;
+            position: relative;
+        }
+        .controls {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .controls button {
+            margin: 5px;
+            padding: 8px 16px;
+            background: #007acc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .controls button:hover {
+            background: #005a99;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        
+        /* Custom styling for demonstrating formatting */
+        .highlight-high-salary {
+            background-color: #d4edda !important;
+            color: #155724 !important;
+            font-weight: bold;
+        }
+        
+        .highlight-manager {
+            background-color: #fff3cd !important;
+            color: #856404 !important;
+        }
+        
+        .highlight-inactive {
+            background-color: #f8d7da !important;
+            color: #721c24 !important;
+            text-decoration: line-through;
+        }
+        
+        .manual-vip {
+            border: 2px solid #dc3545 !important;
+            background-color: #f1c6c7 !important;
+        }
+        
+        .manual-important {
+            background-color: #ffeaa7 !important;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>JwListBox Sprint 8 Test</h1>
+        <h2>Advanced Formatting: Manual Tags & Conditional Formats</h2>
+        <p><strong>Test Instructions:</strong> Apply some manual tags and conditional formats, then use the sorting buttons to verify that your formatting persists across data operations!</p>
+        
+        <div class="controls">
+            <h3>Display Mode</h3>
+            <button onclick="setGridMode()">Grid Mode</button>
+            <button onclick="setListMode()">List Mode</button>
+            
+            <h3>Manual Tagging</h3>
+            <button onclick="tagFirstRowAsVIP()">Tag First Row as VIP</button>
+            <button onclick="tagSalaryCell()">Tag Salary Cell (Row 2)</button>
+            <button onclick="removeVIPTag()">Remove VIP Tag</button>
+            
+            <h3>Conditional Formatting</h3>
+            <button onclick="addHighSalaryFormat()">Highlight High Salaries (>70k)</button>
+            <button onclick="addManagerFormat()">Highlight Managers</button>
+            <button onclick="addInactiveFormat()">Highlight Inactive Users</button>
+            <button onclick="removeHighSalaryFormat()">Remove High Salary Format</button>
+            <button onclick="clearAllFormats()">Clear All Formats</button>
+            
+            <h3>Data Operations (Test Persistence)</h3>
+            <button onclick="sortByName()">Sort by Name (A-Z)</button>
+            <button onclick="sortBySalaryDesc()">Sort by Salary (High to Low)</button>
+            <button onclick="sortByDepartment()">Sort by Department</button>
+            <button onclick="resetSort()">Reset to Original Order</button>
+        </div>
+        
+        <div class="status" id="status">Ready</div>
+        
+        <div class="listbox-container" id="listbox-container"></div>
+    </div>
+
+    <script src="./datamaster.js"></script>
+    <script src="./jw-listbox.js"></script>
+    <script>
+        let listbox;
+        
+        // Sample data for testing
+        const testData = [
+            { id: 1, name: 'Alice Johnson', department: 'Engineering', salary: 85000, isActive: true, role: 'Senior Developer' },
+            { id: 2, name: 'Bob Smith', department: 'Marketing', salary: 65000, isActive: true, role: 'Manager' },
+            { id: 3, name: 'Carol Williams', department: 'Engineering', salary: 95000, isActive: false, role: 'Lead Engineer' },
+            { id: 4, name: 'David Brown', department: 'Sales', salary: 55000, isActive: true, role: 'Sales Rep' },
+            { id: 5, name: 'Eve Davis', department: 'HR', salary: 75000, isActive: true, role: 'Manager' },
+            { id: 6, name: 'Frank Miller', department: 'Engineering', salary: 45000, isActive: false, role: 'Junior Developer' }
+        ];
+        
+        function log(message) {
+            document.getElementById('status').textContent = message;
+            console.log(message);
+        }
+        
+        function initializeListbox() {
+            try {
+                listbox = new JwListBox('#listbox-container');
+                
+                // Set up event handlers
+                listbox.on('error', (error) => {
+                    log(`Error: ${error.message}`);
+                    console.error('Listbox error:', error);
+                });
+                
+                listbox.on('click', (payload) => {
+                    log(`Clicked: ${payload.data.name} (ID: ${payload.publicId})`);
+                });
+                
+                // Configure and populate
+                listbox
+                    .setSource(testData)
+                    .setIdField('id')
+                    .setDisplayMode('grid')
+                    .setClickToSelect(true);
+                    
+                log('Listbox initialized with sample data');
+                
+            } catch (error) {
+                log(`Initialization error: ${error.message}`);
+                console.error('Initialization error:', error);
+            }
+        }
+        
+        // Display Mode Functions
+        function setGridMode() {
+            listbox.setDisplayMode('grid');
+            log('Switched to Grid Mode');
+        }
+        
+        function setListMode() {
+            listbox.setDisplayMode('list');
+            log('Switched to List Mode (conditional formats ignored but preserved)');
+        }
+        
+        // Manual Tagging Functions
+        function tagFirstRowAsVIP() {
+            try {
+                listbox.tag(1, 'manual-vip'); // Tag row with ID 1
+                log('Tagged first row (Alice) as VIP');
+            } catch (error) {
+                log(`Tag error: ${error.message}`);
+            }
+        }
+        
+        function tagSalaryCell() {
+            try {
+                listbox.tag(2, 'manual-important', { field: 'salary' }); // Tag salary cell in row with ID 2
+                log('Tagged salary cell in second row (Bob) as important');
+            } catch (error) {
+                log(`Tag error: ${error.message}`);
+            }
+        }
+        
+        function removeVIPTag() {
+            try {
+                listbox.removeTag(1, 'manual-vip');
+                log('Removed VIP tag from first row');
+            } catch (error) {
+                log(`Remove tag error: ${error.message}`);
+            }
+        }
+        
+        // Conditional Formatting Functions
+        function addHighSalaryFormat() {
+            try {
+                listbox.addFormat({
+                    name: 'high-salary',
+                    searchField: 'salary',
+                    match: function(value) { return value > 70000; },
+                    tag: 'highlight-high-salary',
+                    target: 'cell'
+                });
+                log('Added conditional format for high salaries (>70k)');
+            } catch (error) {
+                log(`Format error: ${error.message}`);
+            }
+        }
+        
+        function addManagerFormat() {
+            try {
+                listbox.addFormat({
+                    name: 'manager-role',
+                    searchField: 'role',
+                    match: 'Manager',
+                    tag: 'highlight-manager',
+                    target: 'row'
+                });
+                log('Added conditional format for Manager roles');
+            } catch (error) {
+                log(`Format error: ${error.message}`);
+            }
+        }
+        
+        function addInactiveFormat() {
+            try {
+                listbox.addFormat({
+                    name: 'inactive-users',
+                    searchField: 'isActive',
+                    match: false,
+                    tag: 'highlight-inactive',
+                    target: 'row'
+                });
+                log('Added conditional format for inactive users');
+            } catch (error) {
+                log(`Format error: ${error.message}`);
+            }
+        }
+        
+        function removeHighSalaryFormat() {
+            try {
+                listbox.removeFormat('high-salary');
+                log('Removed high salary conditional format');
+            } catch (error) {
+                log(`Remove format error: ${error.message}`);
+            }
+        }
+        
+        function clearAllFormats() {
+            try {
+                listbox.clearAllFormats();
+                log('Cleared all conditional formats');
+            } catch (error) {
+                log(`Clear formats error: ${error.message}`);
+            }
+        }
+        
+        // Data Operations Functions (Test Persistence)
+        function sortByName() {
+            try {
+                listbox.sort('name', false); // Ascending
+                log('Sorted by Name (A-Z) - Tags and formats should persist!');
+            } catch (error) {
+                log(`Sort error: ${error.message}`);
+            }
+        }
+        
+        function sortBySalaryDesc() {
+            try {
+                listbox.sort('salary', true); // Descending
+                log('Sorted by Salary (High to Low) - Tags and formats should persist!');
+            } catch (error) {
+                log(`Sort error: ${error.message}`);
+            }
+        }
+        
+        function sortByDepartment() {
+            try {
+                listbox.sort('department', false); // Ascending
+                log('Sorted by Department - Tags and formats should persist!');
+            } catch (error) {
+                log(`Sort error: ${error.message}`);
+            }
+        }
+        
+        function resetSort() {
+            try {
+                // Reset to original order by re-setting the source data
+                listbox.setSource(testData);
+                log('Reset to original order - Tags and formats should persist!');
+            } catch (error) {
+                log(`Reset error: ${error.message}`);
+            }
+        }
+        
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initializeListbox);
+    </script>
+</body>
+</html>

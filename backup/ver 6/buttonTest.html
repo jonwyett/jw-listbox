@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+
+    <head>
+        <script>
+
+            function VirtualButton(text, onClickCallback) {
+                this.text = text || 'Button';
+                this.onClickCallback = onClickCallback || function() {};
+                this.buttonDiv = null;
+            }
+
+            VirtualButton.prototype.create = function(parentElement) {
+                var self = this;
+
+                // Create the div element
+                this.buttonDiv = document.createElement('div');
+                this.buttonDiv.innerText = this.text;
+                this.buttonDiv.style.display = 'inline-block';
+                this.buttonDiv.style.padding = '10px 20px';
+                this.buttonDiv.style.border = '1px solid #ccc';
+                this.buttonDiv.style.borderRadius = '5px';
+                this.buttonDiv.style.cursor = 'pointer';
+                this.buttonDiv.style.textAlign = 'center';
+                this.buttonDiv.style.backgroundColor = '#f5f5f5';
+                this.buttonDiv.style.transition = 'background-color 0.3s';
+
+                // Add hover effect
+                this.buttonDiv.onmouseover = function() {
+                    self.buttonDiv.style.backgroundColor = '#e0e0e0';
+                };
+                this.buttonDiv.onmouseout = function() {
+                    self.buttonDiv.style.backgroundColor = '#f5f5f5';
+                };
+
+                // Attach the click event
+                this.buttonDiv.onclick = function() {
+                    self.onClickCallback();
+                };
+
+                // Append to the parent element
+                if (parentElement) {
+                    parentElement.appendChild(this.buttonDiv);
+                }
+            };
+
+            VirtualButton.prototype.remove = function() {
+                if (this.buttonDiv && this.buttonDiv.parentNode) {
+                    this.buttonDiv.parentNode.removeChild(this.buttonDiv);
+                }
+            };
+
+            function startUp() {
+                 // Example usage
+                var myButton1 = new VirtualButton('Click Me', function() {
+                    alert('Button 1 was clicked!');
+                });
+                myButton1.create(document.body);
+                var myButton2 = new VirtualButton('Click Me', function() {
+                    alert('Button 2 was clicked!');
+                });
+                myButton2.create(document.body);
+            }
+
+            
+        
+        </script>
+    </head>
+    <body onload="startUp()">
+        Hello World
+    </body>
+</html>

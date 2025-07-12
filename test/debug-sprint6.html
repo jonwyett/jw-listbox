@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JwListBox Sprint 6 Debug - Data Operations</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            width: 800px;
+            height: 400px;
+            border: 2px solid #333;
+            margin: 20px 0;
+        }
+        .controls {
+            margin: 10px 0;
+        }
+        button {
+            margin: 5px;
+            padding: 8px 16px;
+        }
+        .debug {
+            background: #f5f5f5;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            background: #f9f9f9;
+        }
+        .section h3 {
+            margin-top: 0;
+        }
+        .event-log {
+            background: #e8f4f8;
+            border: 1px solid #b0d4e3;
+            padding: 10px;
+            margin: 10px 0;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .data-summary {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-weight: bold;
+        }
+        .inline-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .warning {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>JwListBox Sprint 6 Debug - Data Operations</h1>
+    <p>Testing sorting, searching, filtering and SQL-like query operations</p>
+
+    <!-- Data Summary Display -->
+    <div class="data-summary" id="data-summary">
+        Master Data: 0 rows | View Data: 0 rows | Selected: 0
+    </div>
+
+    <!-- Basic Sorting Operations -->
+    <div class="section">
+        <h3>Sorting Operations</h3>
+        <p><em>DataMaster API: .sort(fieldOrFields, isDescending)</em></p>
+        <div class="inline-buttons">
+            <button onclick="sortByName()">Sort by Name (A-Z)</button>
+            <button onclick="sortByNameDesc()">Sort by Name (Z-A)</button>
+            <button onclick="sortByAge()">Sort by Age (Low-High)</button>
+            <button onclick="sortByAgeDesc()">Sort by Age (High-Low)</button>
+            <button onclick="sortByDeptThenSalary()">Sort by Dept, then Salary</button>
+        </div>
+    </div>
+
+    <!-- Search/Filter Operations -->
+    <div class="section">
+        <h3>Search & Filter Operations</h3>
+        <p><em>DataMaster API: .search(filter) - non-destructive filtering</em></p>
+        <div class="inline-buttons">
+            <button onclick="searchEngineering()">Search Engineering Dept</button>
+            <button onclick="searchHighSalary()">Search Salary > $70k</button>
+            <button onclick="searchActiveUsers()">Search Active Users</button>
+            <button onclick="searchWithFunction()">Search Age > 30 (function)</button>
+            <button onclick="clearSearch()">Clear Search (Restore All)</button>
+        </div>
+    </div>
+
+    <!-- WHERE Clause Operations -->
+    <div class="section">
+        <h3>SQL-like WHERE Operations</h3>
+        <p><em>DataMaster API: .where(clauseString) - SQL-like filtering</em></p>
+        <div class="inline-buttons">
+            <button onclick="whereEngAndActive()">WHERE dept='Engineering' AND active=true</button>
+            <button onclick="whereHighSalOrMarketing()">WHERE salary > 70000 OR dept='Marketing'</button>
+            <button onclick="whereNameContains()">WHERE firstName LIKE '%a%'</button>
+            <button onclick="whereSalaryRange()">WHERE salary BETWEEN 65000 AND 80000</button>
+        </div>
+    </div>
+
+    <!-- Limit Operations -->
+    <div class="section">
+        <h3>Limit Operations (Destructive)</h3>
+        <p><em>DataMaster API: .limit(filter) & .limitWhere(clause) - destructive filtering</em></p>
+        <div class="warning">
+            <strong>Warning:</strong> Limit operations are destructive and permanently modify the underlying master data. 
+            Once executed, the filtered-out rows are gone forever. Use "Reload Test Data" to restore the original dataset.
+        </div>
+        <div class="inline-buttons">
+            <button onclick="limitToActive()">Limit to Active Users</button>
+            <button onclick="limitToHighSalary()">Limit to High Salary (>$70k)</button>
+            <button onclick="limitWhereEngineering()">limitWhere: dept='Engineering'</button>
+            <button onclick="limitWhereAge()">limitWhere: age > 25</button>
+        </div>
+    </div>
+
+    <!-- Query Operations -->
+    <div class="section">
+        <h3>SQL Query Operations</h3>
+        <p><em>DataMaster API: .query(verb, options) - SELECT operates on view (non-destructive), UPDATE/DELETE operate on master data (destructive)</em></p>
+        <div class="inline-buttons">
+            <button onclick="selectQueryBasic()">SELECT * WHERE age > 25</button>
+            <button onclick="selectQueryFields()">SELECT firstName, salary WHERE active=true</button>
+            <button onclick="selectQueryComplex()">SELECT with ORDER BY</button>
+            <button onclick="updateQuery()">UPDATE salary WHERE dept='Engineering'</button>
+        </div>
+    </div>
+
+    <!-- Combined Operations -->
+    <div class="section">
+        <h3>Combined Operations (Chaining)</h3>
+        <p><em>Test the fluent API with chained operations</em></p>
+        <div class="inline-buttons">
+            <button onclick="chainedExample1()">Search + Sort</button>
+            <button onclick="chainedExample2()">WHERE + Sort + Limit</button>
+            <button onclick="resetToGridMode()">Reset to Grid Mode</button>
+            <button onclick="resetToListMode()">Reset to List Mode</button>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button onclick="clearEventLog()">Clear Event Log</button>
+        <button onclick="clearDebug()">Clear Debug</button>
+        <button onclick="reloadData()">Reload Test Data</button>
+    </div>
+
+    <div id="debug-output" class="debug"></div>
+    
+    <h3>Event Log</h3>
+    <div id="event-log" class="event-log"></div>
+    
+    <div id="container1" class="container"></div>
+
+    <!-- Load DataMaster and JwListBox -->
+    <script src="datamaster.js"></script>
+    <script src="jw-listbox.js"></script>
+
+    <script>
+        let listbox;
+        
+        function log(message) {
+            const debugOutput = document.getElementById('debug-output');
+            debugOutput.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+            console.log(message);
+        }
+
+        function logEvent(eventName, payload) {
+            const eventLog = document.getElementById('event-log');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            // Simplify payload for readability
+            let simplifiedPayload = payload;
+            if (payload && typeof payload === 'object') {
+                if (payload.selectedIds) {
+                    simplifiedPayload = { selectedCount: payload.selectionCount, selectedIds: payload.selectedIds };
+                } else if (payload.id !== undefined) {
+                    simplifiedPayload = { id: payload.id, index: payload.index };
+                }
+            }
+            
+            const eventInfo = `[${timestamp}] ${eventName}: ${JSON.stringify(simplifiedPayload)}\n`;
+            eventLog.textContent += eventInfo;
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+
+        function updateDataSummary() {
+            const summary = document.getElementById('data-summary');
+            if (listbox && listbox.dm && listbox.viewDm) {
+                const masterCount = listbox.dm.toRecordset().length;
+                const viewCount = listbox.viewDm.toRecordset().length;
+                const selectedCount = listbox.getSelected().length;
+                summary.textContent = `Master Data: ${masterCount} rows | View Data: ${viewCount} rows | Selected: ${selectedCount}`;
+            } else {
+                summary.textContent = 'Master Data: 0 rows | View Data: 0 rows | Selected: 0';
+            }
+        }
+        
+        function clearDebug() {
+            document.getElementById('debug-output').textContent = '';
+        }
+
+        function clearEventLog() {
+            document.getElementById('event-log').textContent = '';
+        }
+
+        // Extended test data for better search/sort testing
+        const testData = [
+            { id: 1, firstName: 'Alice', lastName: 'Johnson', age: 28, department: 'Engineering', salary: 85000, isActive: true, email: 'alice@example.com' },
+            { id: 2, firstName: 'Bob', lastName: 'Smith', age: 35, department: 'Marketing', salary: 65000, isActive: true, email: 'bob@example.com' },
+            { id: 3, firstName: 'Charlie', lastName: 'Brown', age: 42, department: 'Sales', salary: 70000, isActive: false, email: 'charlie@example.com' },
+            { id: 4, firstName: 'Diana', lastName: 'Prince', age: 29, department: 'HR', salary: 75000, isActive: true, email: 'diana@example.com' },
+            { id: 5, firstName: 'Ethan', lastName: 'Hunt', age: 38, department: 'Operations', salary: 80000, isActive: true, email: 'ethan@example.com' },
+            { id: 6, firstName: 'Fiona', lastName: 'Apple', age: 26, department: 'Engineering', salary: 90000, isActive: true, email: 'fiona@example.com' },
+            { id: 7, firstName: 'George', lastName: 'Washington', age: 45, department: 'Sales', salary: 72000, isActive: true, email: 'george@example.com' },
+            { id: 8, firstName: 'Hannah', lastName: 'Montana', age: 24, department: 'Marketing', salary: 58000, isActive: false, email: 'hannah@example.com' },
+            { id: 9, firstName: 'Ivan', lastName: 'Drago', age: 33, department: 'Engineering', salary: 95000, isActive: true, email: 'ivan@example.com' },
+            { id: 10, firstName: 'Julia', lastName: 'Roberts', age: 31, department: 'HR', salary: 78000, isActive: true, email: 'julia@example.com' }
+        ];
+
+        function createListbox() {
+            if (listbox) listbox.destroy();
+            
+            listbox = new JwListBox('#container1');
+            
+            // Set up event listeners
+            listbox.on('click', (payload) => logEvent('click', payload));
+            listbox.on('select', (payload) => logEvent('select', payload));
+            listbox.on('error', (error) => {
+                log('Error: ' + JSON.stringify(error));
+                logEvent('error', error);
+            });
+
+            // Set up data change listeners to update summary
+            listbox.on('render', () => updateDataSummary());
+
+            // Configure and set data
+            listbox.setIdField('id')
+                   .setDisplayMode('grid')
+                   .setSelectionMode('replace')
+                   .setSource(testData);
+            
+            updateDataSummary();
+            return listbox;
+        }
+
+        function reloadData() {
+            log('=== Reloading Test Data ===');
+            createListbox();
+            log('Test data reloaded with 10 employee records');
+        }
+
+        // === SORTING OPERATIONS ===
+        
+        function sortByName() {
+            log('=== Sort by Name (A-Z) ===');
+            listbox.sort('firstName');
+            log('Sorted by firstName ascending');
+        }
+
+        function sortByNameDesc() {
+            log('=== Sort by Name (Z-A) ===');
+            listbox.sort('firstName', true);
+            log('Sorted by firstName descending');
+        }
+
+        function sortByAge() {
+            log('=== Sort by Age (Low-High) ===');
+            listbox.sort('age');
+            log('Sorted by age ascending');
+        }
+
+        function sortByAgeDesc() {
+            log('=== Sort by Age (High-Low) ===');
+            listbox.sort('age', true);
+            log('Sorted by age descending');
+        }
+
+        function sortByDeptThenSalary() {
+            log('=== Sort by Department, then Salary ===');
+            listbox.sort(['department', 'salary'], [false, true]);
+            log('Sorted by department (A-Z), then salary (high-low)');
+        }
+
+        // === SEARCH OPERATIONS ===
+
+        function searchEngineering() {
+            log('=== Search Engineering Department ===');
+            listbox.search({ department: 'Engineering' });
+            log('Filtered to show only Engineering department employees');
+        }
+
+        function searchHighSalary() {
+            log('=== Search High Salary (>$70k) ===');
+            listbox.search(row => row.salary > 70000);
+            log('Filtered to show employees with salary > $70,000');
+        }
+
+        function searchActiveUsers() {
+            log('=== Search Active Users ===');
+            listbox.search({ isActive: true });
+            log('Filtered to show only active employees');
+        }
+
+        function searchWithFunction() {
+            log('=== Search Age > 30 (Function Filter) ===');
+            listbox.search(row => row.age > 30);
+            log('Filtered to show employees older than 30');
+        }
+
+        function clearSearch() {
+            log('=== Clear Search (Restore View Only) ===');
+            listbox.clearSearch();
+            log('Restored view to show all data in master dataset (does NOT undo destructive operations)');
+        }
+
+        // === WHERE CLAUSE OPERATIONS ===
+
+        function whereEngAndActive() {
+            log("=== WHERE dept='Engineering' AND active='true' ===");
+            listbox.where("department = 'Engineering' AND isActive = 'true'");
+            log('SQL WHERE: Engineering employees who are active');
+        }
+
+        function whereHighSalOrMarketing() {
+            log("=== WHERE salary > '70000' OR dept='Marketing' ===");
+            listbox.where("salary > '70000' OR department = 'Marketing'");
+            log('SQL WHERE: High salary OR Marketing department');
+        }
+
+        function whereNameContains() {
+            log("=== WHERE firstName LIKE '%a%' ===");
+            listbox.where("firstName LIKE '%a%'");
+            log('SQL WHERE: First names containing letter "a"');
+        }
+
+        function whereSalaryRange() {
+            log('=== WHERE salary BETWEEN \'65000\' AND \'80000\' ===');
+            listbox.where('salary >= \'65000\' AND salary <= \'80000\'');
+            log('SQL WHERE: Salary between $65k and $80k');
+        }
+
+        // === LIMIT OPERATIONS (DESTRUCTIVE) ===
+
+        function limitToActive() {
+            log('=== Limit to Active Users (PERMANENTLY DESTRUCTIVE) ===');
+            listbox.limit({ isActive: true });
+            log('WARNING: PERMANENTLY removed inactive users from master dataset');
+        }
+
+        function limitToHighSalary() {
+            log('=== Limit to High Salary >$70k (PERMANENTLY DESTRUCTIVE) ===');
+            listbox.limit(row => row.salary > 70000);
+            log('WARNING: PERMANENTLY removed low salary employees from master dataset');
+        }
+
+        function limitWhereEngineering() {
+            log("=== limitWhere: dept='Engineering' (PERMANENTLY DESTRUCTIVE) ===");
+            listbox.limitWhere("department = 'Engineering'");
+            log('WARNING: PERMANENTLY removed non-Engineering employees from master dataset');
+        }
+
+        function limitWhereAge() {
+            log('=== limitWhere: age > \'25\' (PERMANENTLY DESTRUCTIVE) ===');
+            listbox.limitWhere('age > \'25\'');
+            log('WARNING: PERMANENTLY removed employees age 25 and under from master dataset');
+        }
+
+        // === QUERY OPERATIONS ===
+
+        function selectQueryBasic() {
+            log('=== SELECT * WHERE age > \'25\' (operates on current view) ===');
+            listbox.query('select', { where: 'age > \'25\'' });
+            log('SQL SELECT: Non-destructive filtering of current view data');
+        }
+
+        function selectQueryFields() {
+            log('=== SELECT firstName, salary WHERE active=\'true\' (operates on current view) ===');
+            listbox.query('select', { 
+                fields: ['firstName', 'salary'], 
+                where: 'isActive = \'true\'' 
+            });
+            log('SQL SELECT: Non-destructive field selection from current view');
+        }
+
+        function selectQueryComplex() {
+            log('=== SELECT with ORDER BY (operates on current view) ===');
+            listbox.query('select', { 
+                where: 'salary > \'60000\'', 
+                orderBy: [{ field: 'salary', direction: 'desc' }] 
+            });
+            log('SQL SELECT: Non-destructive query with WHERE and ORDER BY on current view');
+        }
+
+        function updateQuery() {
+            log('=== UPDATE salary WHERE dept=Engineering (PERMANENTLY MODIFIES DATA) ===');
+            listbox.query('update', { 
+                set: { salary: row => row.salary * 1.1 }, // 10% raise
+                where: "department = 'Engineering'" 
+            });
+            log('WARNING: PERMANENTLY modified salaries in master dataset - gave 10% raise to Engineering');
+        }
+
+        // === COMBINED OPERATIONS ===
+
+        function chainedExample1() {
+            log('=== Chained: Search + Sort ===');
+            listbox.search({ isActive: true }).sort('salary', true);
+            log('Chained: Search active users, then sort by salary (high-low)');
+        }
+
+        function chainedExample2() {
+            log('=== Chained: WHERE + Sort + Limit ===');
+            listbox.where('salary > \'60000\'')
+                   .sort('age')
+                   .limit(row => row.age < 40);
+            log('Chained: WHERE salary>60k, sort by age, limit to age<40');
+        }
+
+        function resetToGridMode() {
+            log('=== Reset to Grid Mode ===');
+            listbox.clearSearch().setDisplayMode('grid');
+            log('Reset: Cleared search and switched to grid mode');
+        }
+
+        function resetToListMode() {
+            log('=== Reset to List Mode ===');
+            listbox.clearSearch().setDisplayMode('list');
+            log('Reset: Cleared search and switched to list mode');
+        }
+
+        // Auto-initialize
+        setTimeout(() => {
+            log('Auto-initializing Sprint 6 debug with test data...');
+            createListbox();
+        }, 500);
+    </script>
+</body>
+</html>

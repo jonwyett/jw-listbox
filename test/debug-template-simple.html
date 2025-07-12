@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Template Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .listbox { height: 300px; border: 2px solid red; position: relative; background: #f0f0f0; }
+        .debug { background: #e0e0e0; padding: 10px; margin: 10px 0; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Simple Template Debug</h1>
+    
+    <button onclick="toggle()">Toggle Print Mode</button>
+    <button onclick="logState()">Log State</button>
+    <button onclick="forceRender()">Force Render</button>
+    
+    <div class="debug" id="output">Output will appear here</div>
+    
+    <div class="listbox" id="test-listbox">Loading...</div>
+
+    <!-- Very simple templates -->
+    <template id="normal">
+        <div style="padding: 10px; background: lightblue; margin: 5px; border: 1px solid blue;">
+            NORMAL: {{name}}
+        </div>
+    </template>
+
+    <template id="print">
+        <div style="padding: 5px; background: lightgreen; margin: 2px; border: 1px solid green;">
+            PRINT: {{name}}
+        </div>
+    </template>
+
+    <script src="datamaster.js"></script>
+    <script src="jw-listbox.js"></script>
+    <script>
+        const data = [
+            { id: 1, name: 'Test Item 1' },
+            { id: 2, name: 'Test Item 2' }
+        ];
+
+        let listbox;
+        let isPrintMode = false;
+
+        function log(msg) {
+            document.getElementById('output').innerHTML += msg + '<br>';
+            console.log(msg);
+        }
+
+        function init() {
+            try {
+                log('=== INITIALIZING ===');
+                listbox = new JwListBox('#test-listbox');
+                
+                log('Setting source...');
+                listbox.setSource(data);
+                
+                log('Setting normal template...');
+                listbox.setTemplate('#normal');
+                
+                log('Setting print template...');
+                listbox.setPrintTemplate('#print');
+                
+                log('Setting display mode...');
+                listbox.setDisplayMode('list');
+                
+                log('=== INIT COMPLETE ===');
+                
+                // Log initial state
+                logState();
+                
+            } catch (error) {
+                log('ERROR: ' + error.message);
+                console.error(error);
+            }
+        }
+
+        function toggle() {
+            try {
+                isPrintMode = !isPrintMode;
+                log('=== TOGGLING TO: ' + isPrintMode + ' ===');
+                
+                // Before toggle
+                log('BEFORE - Template: ' + listbox._options.template);
+                log('BEFORE - Print Template: ' + listbox._options.printTemplate);
+                log('BEFORE - Print Mode: ' + listbox._options.printMode);
+                
+                // Test template retrieval before toggle
+                const templateBefore = listbox._getTemplate();
+                log('BEFORE - Retrieved template: ' + (templateBefore ? templateBefore.substring(0, 50) + '...' : 'NULL'));
+                
+                listbox.printMode(isPrintMode);
+                
+                // After toggle
+                log('AFTER - Template: ' + listbox._options.template);
+                log('AFTER - Print Template: ' + listbox._options.printTemplate);
+                log('AFTER - Print Mode: ' + listbox._options.printMode);
+                
+                // Test template retrieval after toggle
+                const templateAfter = listbox._getTemplate();
+                log('AFTER - Retrieved template: ' + (templateAfter ? templateAfter.substring(0, 50) + '...' : 'NULL'));
+                
+            } catch (error) {
+                log('TOGGLE ERROR: ' + error.message);
+                console.error(error);
+            }
+        }
+
+        function logState() {
+            try {
+                log('=== CURRENT STATE ===');
+                log('listbox._options.template: ' + listbox._options.template);
+                log('listbox._options.printTemplate: ' + listbox._options.printTemplate);
+                log('listbox._options.printMode: ' + listbox._options.printMode);
+                log('listbox._options.displayMode: ' + listbox._options.displayMode);
+                
+                // Check if elements exist
+                const normalEl = document.querySelector('#normal');
+                const printEl = document.querySelector('#print');
+                log('Normal template element exists: ' + !!normalEl);
+                log('Print template element exists: ' + !!printEl);
+                
+                if (normalEl) log('Normal template content: ' + normalEl.innerHTML.substring(0, 50) + '...');
+                if (printEl) log('Print template content: ' + printEl.innerHTML.substring(0, 50) + '...');
+                
+                // Check DOM content
+                const listboxContent = document.querySelector('#test-listbox').innerHTML;
+                log('Listbox DOM content length: ' + listboxContent.length);
+                log('Listbox DOM preview: ' + listboxContent.substring(0, 100) + '...');
+                
+            } catch (error) {
+                log('STATE ERROR: ' + error.message);
+                console.error(error);
+            }
+        }
+
+        function forceRender() {
+            try {
+                log('=== FORCING RENDER ===');
+                listbox.render();
+            } catch (error) {
+                log('RENDER ERROR: ' + error.message);
+                console.error(error);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

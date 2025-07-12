@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JwListBox Sprint  Debug</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #container {
+            width: 600px;
+            height: 400px;
+            border: 2px solid #333;
+            margin: 20px 0;
+        }
+        .controls {
+            margin: 10px 0;
+        }
+        button {
+            margin: 5px;
+            padding: 8px 16px;
+        }
+        .debug {
+            background: #f5f5f5;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>JwListBox Sprint 2 Debug</h1>
+    <p>Testing DataMaster integration and basic list rendering</p>
+    
+    <div class="controls">
+        <button onclick="checkDependencies()">Check Dependencies</button>
+        <button onclick="testSimpleRecordset()">Test Simple Recordset</button>
+        <button onclick="debugComponent()">Debug Component</button>
+    </div>
+    
+    <div id="debug-output" class="debug"></div>
+    
+    <div id="container"></div>
+    
+    <!-- Load DataMaster and JwListBox -->
+    <script src="datamaster.js"></script>
+    <script src="jw-listbox.js"></script>
+    
+    <script>
+        function log(message) {
+            const debugOutput = document.getElementById('debug-output');
+            debugOutput.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+            console.log(message);
+        }
+
+        function checkDependencies() {
+            log('=== Checking Dependencies ===');
+            log('DataMaster available: ' + (typeof DataMaster !== 'undefined'));
+            log('JwListBox available: ' + (typeof JwListBox !== 'undefined'));
+            
+            if (typeof DataMaster !== 'undefined') {
+                log('DataMaster.fromRecordset: ' + (typeof DataMaster.fromRecordset === 'function'));
+                log('DataMaster.fromTable: ' + (typeof DataMaster.fromTable === 'function'));
+                log('DataMaster.fromCsv: ' + (typeof DataMaster.fromCsv === 'function'));
+            }
+        }
+
+        function testSimpleRecordset() {
+            log('=== Testing Simple Recordset ===');
+            
+            try {
+                const testData = [
+                    { id: 1, name: 'Test Person 1' },
+                    { id: 2, name: 'Test Person 2' }
+                ];
+                
+                log('Test data: ' + JSON.stringify(testData));
+                
+                if (typeof DataMaster === 'undefined') {
+                    log('ERROR: DataMaster not available - cannot proceed');
+                    return;
+                }
+                
+                // Test DataMaster directly
+                log('Creating DataMaster instance...');
+                const dm = DataMaster.fromRecordset(testData);
+                log('DataMaster created successfully');
+                log('DataMaster recordset: ' + JSON.stringify(dm.toRecordset()));
+                
+                // Test JwListBox
+                log('Creating JwListBox instance...');
+                const listbox = new JwListBox('#container');
+                
+                // Set up error handling
+                listbox.on('error', (error) => {
+                    log('JwListBox Error: ' + JSON.stringify(error));
+                });
+                
+                log('Setting source data...');
+                listbox.setSource(testData);
+                log('Source data set successfully');
+                
+                // Check internal state
+                setTimeout(() => {
+                    debugComponent();
+                }, 100);
+                
+            } catch (error) {
+                log('ERROR: ' + error.message);
+                log('Stack: ' + error.stack);
+            }
+        }
+
+        function debugComponent() {
+            log('=== Component Debug Info ===');
+            
+            if (typeof window.listbox === 'undefined') {
+                log('Creating global listbox reference...');
+                window.listbox = new JwListBox('#container');
+            }
+            
+            const lb = window.listbox;
+            
+            log('Component exists: ' + (lb !== null));
+            log('dm exists: ' + (lb.dm !== null));
+            log('viewDm exists: ' + (lb.viewDm !== null));
+            log('_rowMap size: ' + (lb._rowMap ? lb._rowMap.size : 'undefined'));
+            log('_options: ' + JSON.stringify(lb._options));
+            log('_isDirty: ' + lb._isDirty);
+            
+            if (lb.dm) {
+                log('dm recordset length: ' + lb.dm.toRecordset().length);
+            }
+            if (lb.viewDm) {
+                log('viewDm recordset length: ' + lb.viewDm.toRecordset().length);
+            }
+            
+            // Check DOM structure
+            const container = document.getElementById('container');
+            log('Container children: ' + container.children.length);
+            if (container.children.length > 0) {
+                log('First child className: ' + container.children[0].className);
+                const wrapper = container.querySelector('.jw-listbox-wrapper');
+                if (wrapper) {
+                    log('Wrapper found, children: ' + wrapper.children.length);
+                    const body = wrapper.querySelector('.jw-listbox__body');
+                    if (body) {
+                        log('Body found, innerHTML length: ' + body.innerHTML.length);
+                        log('Body innerHTML: ' + body.innerHTML);
+                    }
+                }
+            }
+        }
+
+        // Initialize
+        checkDependencies();
+        
+        // Auto-run if DataMaster is available
+        if (typeof DataMaster !== 'undefined') {
+            log('Auto-running test...');
+            setTimeout(testSimpleRecordset, 500);
+        } else {
+            log('DataMaster not available - manual testing required');
+        }
+    </script>
+</body>
+</html>

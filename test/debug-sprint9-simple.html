@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JwListBox Sprint 9: Section Headers (Simple)</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            max-width: 1000px;
+        }
+        .controls {
+            margin: 10px 0;
+        }
+        .control-group {
+            margin: 5px 0;
+        }
+        button {
+            margin: 2px;
+            padding: 5px 10px;
+        }
+        .listbox-container {
+            height: 400px;
+            border: 1px solid #ccc;
+            position: relative;
+            margin: 10px 0;
+        }
+        .log {
+            height: 150px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>JwListBox Sprint 9: Section Headers (Simple Demo)</h1>
+
+        <div class="controls">
+            <div class="control-group">
+                <label>Display Mode:</label>
+                <select id="displayMode">
+                    <option value="list">List</option>
+                    <option value="grid" selected>Grid</option>
+                </select>
+                
+                <label>Auto Section Hide:</label>
+                <input type="checkbox" id="autoSectionHide">
+            </div>
+            
+            <div class="control-group">
+                <button onclick="sortByDepartment()">Sort by Department (sections)</button>
+                <button onclick="sortByName()">Sort by Name (no sections)</button>
+                <button onclick="sortBySalary()">Sort by Salary (sections)</button>
+            </div>
+            
+            <div class="control-group">
+                <button onclick="expandAll()">Expand All</button>
+                <button onclick="collapseAll()">Collapse All</button>
+                <button onclick="toggleEngineering()">Toggle Engineering</button>
+                <button onclick="toggleMarketing()">Toggle Marketing</button>
+                <button onclick="debugTableStructure()">Debug Table HTML</button>
+            </div>
+        </div>
+
+        <div class="listbox-container" id="listbox1"></div>
+
+        <div>
+            <h3>Event Log</h3>
+            <div class="log" id="eventLog"></div>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+    </div>
+
+    <script src="datamaster.js"></script>
+    <script src="jw-listbox.js"></script>
+    
+    <script>
+        // Sample data
+        const employeeData = [
+            { id: 1, name: 'Alice Johnson', department: 'Engineering', salary: 85000 },
+            { id: 2, name: 'Bob Smith', department: 'Engineering', salary: 75000 },
+            { id: 3, name: 'Carol Davis', department: 'Marketing', salary: 65000 },
+            { id: 4, name: 'David Wilson', department: 'Marketing', salary: 55000 },
+            { id: 5, name: 'Eva Brown', department: 'Engineering', salary: 90000 },
+            { id: 6, name: 'Frank Miller', department: 'Sales', salary: 70000 },
+            { id: 7, name: 'Grace Lee', department: 'Sales', salary: 60000 },
+            { id: 8, name: 'Henry Taylor', department: 'Engineering', salary: 80000 },
+            { id: 9, name: 'Iris Chen', department: 'Marketing', salary: 58000 },
+            { id: 10, name: 'Jack Anderson', department: 'Sales', salary: 65000 }
+        ];
+
+        let listbox1;
+        const sectionStates = {
+            'Engineering': true,
+            'Marketing': true,
+            'Sales': true
+        };
+
+        function initializeDemo() {
+            listbox1 = new JwListBox('#listbox1', {
+                displayMode: 'grid',
+                idField: 'id',
+                showTableHeaders: true
+            });
+
+            // Event listeners
+            listbox1.on('click-section', (payload) => {
+                sectionStates[payload.sectionValue] = payload.isCollapsed;
+                log(`Section "${payload.sectionValue}" clicked`);
+            });
+
+            listbox1.on('select', (payload) => {
+                log(`Selected: ${payload.selectedIds.join(', ')}`);
+            });
+
+            listbox1.on('headerClick', (payload) => {
+                log(`Header clicked: "${payload.field}" (${payload.headerText})`);
+                console.log('Header click payload:', payload);
+            });
+
+            listbox1.on('error', (payload) => {
+                log(`Error: ${payload.message}`);
+            });
+
+            // UI controls
+            document.getElementById('displayMode').addEventListener('change', (e) => {
+                listbox1.setDisplayMode(e.target.value);
+                log(`Display mode: ${e.target.value}`);
+            });
+
+            document.getElementById('autoSectionHide').addEventListener('change', (e) => {
+                listbox1.setAutoSectionHide(e.target.checked);
+                log(`Auto section hide: ${e.target.checked}`);
+            });
+
+            // Set data
+            listbox1.setSource(employeeData);
+            sortByDepartment();
+        }
+
+        // Sort functions
+        function sortByDepartment() {
+            listbox1.sort('department', false, true);
+            log('Sorted by department with sections');
+        }
+
+        function sortByName() {
+            listbox1.sort('name', false, false);
+            log('Sorted by name without sections');
+        }
+
+        function sortBySalary() {
+            listbox1.sort('salary', true, true);
+            log('Sorted by salary with sections');
+        }
+
+        // Section controls
+        function expandAll() {
+            ['Engineering', 'Marketing', 'Sales'].forEach(dept => {
+                sectionStates[dept] = true;
+                listbox1.displaySection(dept, true);
+            });
+            log('Expanded all sections');
+        }
+
+        function collapseAll() {
+            ['Engineering', 'Marketing', 'Sales'].forEach(dept => {
+                sectionStates[dept] = false;
+                listbox1.displaySection(dept, false);
+            });
+            log('Collapsed all sections');
+        }
+
+        function toggleEngineering() {
+            sectionStates['Engineering'] = !sectionStates['Engineering'];
+            listbox1.displaySection('Engineering', sectionStates['Engineering']);
+            log(`Engineering: ${sectionStates['Engineering'] ? 'expanded' : 'collapsed'}`);
+        }
+
+        function toggleMarketing() {
+            sectionStates['Marketing'] = !sectionStates['Marketing'];
+            listbox1.displaySection('Marketing', sectionStates['Marketing']);
+            log(`Marketing: ${sectionStates['Marketing'] ? 'expanded' : 'collapsed'}`);
+        }
+
+        function log(message) {
+            const logElement = document.getElementById('eventLog');
+            const entry = document.createElement('div');
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logElement.appendChild(entry);
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('eventLog').innerHTML = '';
+        }
+
+        function debugTableStructure() {
+            const container = document.getElementById('listbox1');
+            const table = container.querySelector('table');
+            
+            if (table) {
+                console.log('=== TABLE STRUCTURE DEBUG ===');
+                console.log('Table HTML:', table.outerHTML);
+                console.log('Table structure:', table);
+                
+                const thead = table.querySelector('thead');
+                const tbody = table.querySelector('tbody');
+                
+                console.log('Has thead:', !!thead);
+                console.log('Has tbody:', !!tbody);
+                
+                if (thead) {
+                    console.log('Header rows:', thead.querySelectorAll('tr').length);
+                    const headers = thead.querySelectorAll('th');
+                    console.log('Header cells:', headers.length);
+                    
+                    // Add debug click listeners to headers
+                    headers.forEach((th, index) => {
+                        th.addEventListener('click', (e) => {
+                            console.log(`Direct header click detected on header ${index}:`, th);
+                            console.log('Event target:', e.target);
+                            console.log('Classes:', th.className);
+                        });
+                    });
+                    log('Added direct click listeners to headers');
+                }
+                
+                if (tbody) {
+                    console.log('Body rows:', tbody.querySelectorAll('tr').length);
+                    console.log('Body cells:', tbody.querySelectorAll('td').length);
+                }
+                
+                log('Table structure logged to console');
+            } else {
+                console.log('No table found in container!');
+                console.log('Container contents:', container.innerHTML);
+                log('ERROR: No table found!');
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', initializeDemo);
+    </script>
+</body>
+</html>

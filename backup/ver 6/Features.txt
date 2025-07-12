@@ -1,0 +1,59 @@
+Public
+-clear (set source blank instead)
+-a way to set options, should work with limited options (ex: just setwidths)
+-source
+-printmode
+-get data in listbox, all vs. limited
+-add data (rows)
+-remove data
+-update data
+-sort
+-sections
+    -show a section (name t/f)
+    -show all sections (t/f)
+    -get the header element of a section for CSS purposes/etc
+-search
+-show/hide rows (why, maybe used by the sections section)
+-various
+    -get row number based on PK
+    -get field value
+    -get row data
+    -get element name for row
+    -get element itself for row (same func)
+    -get the element of a field
+-find rows based on search (same as search?)
+-selected (set or retrieve selected rows)
+-get a column that isn't the ID row (same as selected?)
+-formatting tables:
+        {
+            name: {
+                mode: "Mode",
+                searchField: "fieldName",
+                tagField: "fieldName", //Or use just 'field' if they are both the same 
+                match: "Pattern", 
+                tag: "CSS tag"
+            }
+        } 
+    -add format
+    -remove format
+    -clear all formats
+-tag (add css to row/field)
+-clear tags
+-get length
+-get details
+    -other details
+-show loading
+-show load more
+-external events:
+    -click
+    -double-click
+    -keyup
+    -clickCell
+-custom emitter
+    -on
+    -externalEmit
+
+
+
+
+

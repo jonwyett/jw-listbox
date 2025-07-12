@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JwListBox Sprint 3 Debug - Templating Engine</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            width: 600px;
+            height: 300px;
+            border: 2px solid #333;
+            margin: 20px 0;
+        }
+        .controls {
+            margin: 10px 0;
+        }
+        button {
+            margin: 5px;
+            padding: 8px 16px;
+        }
+        .debug {
+            background: #f5f5f5;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .template-hidden {
+            display: none;
+        }
+        .template-examples {
+            margin: 20px 0;
+            padding: 10px;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+        }
+        .template-examples h3 {
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>JwListBox Sprint 3 Debug - Templating Engine</h1>
+    <p>Testing the secure templating system with double-brace (escaped) and triple-brace (raw) syntax</p>
+    
+    <!-- Template Examples for Reference -->
+    <div class="template-examples">
+        <h3>Template Examples</h3>
+        <h4>String Template:</h4>
+        <code>"&lt;div class='user-card'&gt;&lt;h4&gt;&#123;&#123;name&#125;&#125;&lt;/h4&gt;&lt;p&gt;&#123;&#123;email&#125;&#125;&lt;/p&gt;&lt;/div&gt;"</code>
+        
+        <h4>Template Element:</h4>
+        <code>#user-template</code>
+        
+        <h4>Div Template:</h4>
+        <code>#div-template</code>
+    </div>
+    
+    <!-- Hidden Templates for Testing -->
+    <template id="user-template">
+        <div class="user-card" style="border: 1px solid #ddd; padding: 10px; margin: 5px 0; border-radius: 4px;">
+            <h4 style="margin: 0 0 5px 0; color: #333;">{{name}}</h4>
+            <p style="margin: 0; color: #666;">Email: {{email}}</p>
+            <p style="margin: 5px 0 0 0; font-size: 0.9em;">ID: {{id}}</p>
+        </div>
+    </template>
+    
+    <div id="div-template" class="template-hidden">
+        <div class="simple-row" style="padding: 8px; border-bottom: 1px solid #eee;">
+            <strong>{{name}}</strong> - {{email}}
+        </div>
+    </div>
+    
+    <div class="controls">
+        <button onclick="testDefaultRendering()">Test Default (No Template)</button>
+        <button onclick="testStringTemplate()">Test String Template</button>
+        <button onclick="testTemplateElement()">Test &lt;template&gt; Element</button>
+        <button onclick="testDivTemplate()">Test &lt;div&gt; Template</button>
+        <button onclick="testRawHtmlSyntax()">Test Raw HTML Syntax</button>
+        <button onclick="testMixedSyntax()">Test Mixed Syntax</button>
+        <button onclick="testErrorHandling()">Test Error Handling</button>
+        <button onclick="clearDebug()">Clear Debug</button>
+    </div>
+    
+    <div id="debug-output" class="debug"></div>
+    
+    <div id="container1" class="container"></div>
+    <div id="container2" class="container"></div>
+    
+    <!-- Load DataMaster and JwListBox -->
+    <script src="datamaster.js"></script>
+    <script src="jw-listbox.js"></script>
+    
+    <script>
+        let listbox1, listbox2;
+        
+        function log(message) {
+            const debugOutput = document.getElementById('debug-output');
+            debugOutput.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+            console.log(message);
+        }
+        
+        function clearDebug() {
+            document.getElementById('debug-output').textContent = '';
+        }
+        
+        // Test data with various field types
+        const testData = [
+            { 
+                id: 1, 
+                name: 'Alice Johnson', 
+                email: 'alice@example.com',
+                html: '<strong>Admin</strong>',
+                xss: '&lt;script&gt;alert("xss")&lt;/script&gt;Dangerous'
+            },
+            { 
+                id: 2, 
+                name: 'Bob Smith', 
+                email: 'bob@example.com',
+                html: '<em>User</em>',
+                xss: '&lt;img src="x" onerror="alert(\'xss\')"&gt;Malicious'
+            },
+            { 
+                id: 3, 
+                name: 'Charlie Brown', 
+                email: 'charlie@example.com',
+                html: '<span style="color: blue;">Editor</span>',
+                xss: 'javascript:alert("xss")'
+            }
+        ];
+        
+        function testDefaultRendering() {
+            log('=== Testing Default Rendering (No Template) ===');
+            
+            if (listbox1) listbox1.destroy();
+            
+            listbox1 = new JwListBox('#container1');
+            listbox1.on('error', (error) => {
+                log('Error: ' + JSON.stringify(error));
+            });
+            
+            listbox1.setSource(testData);
+            log('Default rendering applied - should show field: value format');
+        }
+        
+        function testStringTemplate() {
+            log('=== Testing String Template ===');
+            
+            if (listbox1) listbox1.destroy();
+            
+            const template = `
+                <div class="user-card" style="border: 1px solid #ddd; padding: 10px; margin: 5px 0; border-radius: 4px;">
+                    <h4 style="margin: 0 0 5px 0; color: #333;">{{name}}</h4>
+                    <p style="margin: 0; color: #666;">Email: {{email}}</p>
+                    <p style="margin: 5px 0 0 0; font-size: 0.9em;">ID: {{id}}</p>
+                </div>
+            `;
+            
+            listbox1 = new JwListBox('#container1');
+            listbox1.on('error', (error) => {
+                log('Error: ' + JSON.stringify(error));
+            });
+            
+            listbox1.setTemplate(template).setSource(testData);
+            log('String template applied');
+        }
+        
+        function testTemplateElement() {
+            log('=== Testing Template Element ===');
+            
+            if (listbox1) listbox1.destroy();
+            
+            listbox1 = new JwListBox('#container1');
+            listbox1.on('error', (error) => {
+                log('Error: ' + JSON.stringify(error));
+            });
+            
+            listbox1.setTemplate('#user-template').setSource(testData);
+            log('Template element (#user-template) applied');
+        }
+        
+        function testDivTemplate() {
+            log('=== Testing Div Template ===');
+            
+            if (listbox1) listbox1.destroy();
+            
+            listbox1 = new JwListBox('#container1');
+            listbox1.on('error', (error) => {
+                log('Error: ' + JSON.stringify(error));
+            });
+            
+            listbox1.setTemplate('#div-template').setSource(testData);
+            log('Div template (#div-template) applied');
+        }
+        
+        function testRawHtmlSyntax() {
+            log('=== Testing Raw HTML Syntax ===');
+            
+            if (listbox1) listbox1.destroy();
+            
+            const template = `
+                <div style="padding: 10px; border-bottom: 1px solid #eee;">
+                    <h4>{{name}} - Status: {{{html}}}</h4>
+                    <p>Email: {{email}}</p>
+                    <small>Raw HTML field will render as HTML, name/email will be escaped</small>
+                </div>
+            `;
+            
+            listbox1 = new JwListBox('#container1');
+            listbox1.on('error', (error) => {
+                log('Error: ' + JSON.stringify(error));
+            });
+            
+            listbox1.setTemplate(template).setSource(testData);
+            log('Raw HTML syntax test - triple braces should render as HTML, double braces should be escaped');
+        }
+        
+        function testMixedSyntax() {
+            log('=== Testing Mixed Syntax ===');
+            
+            if (listbox1) listbox1.destroy();
+            
+            const template = `
+                <div style="padding: 10px; border: 1px solid #ccc; margin: 5px 0;">
+                    <h4>User: {{name}} (ID: {{id}})</h4>
+                    <p>Email: {{email}}</p>
+                    <p>HTML Status: {{{html}}}</p>
+                    <p>XSS Test (escaped): {{xss}}</p>
+                    <p>XSS Test (raw - dangerous!): {{{xss}}}</p>
+                    <small>Notice how double braces are safe (escaped) while triple braces could be dangerous</small>
+                </div>
+            `;
+            
+            listbox1 = new JwListBox('#container1');
+            listbox1.on('error', (error) => {
+                log('Error: ' + JSON.stringify(error));
+            });
+            
+            listbox1.setTemplate(template).setSource(testData);
+            log('Mixed syntax test - compare double braces (safe) vs triple braces (potentially dangerous)');
+        }
+        
+        function testErrorHandling() {
+            log('=== Testing Error Handling ===');
+            
+            if (listbox1) listbox1.destroy();
+            if (listbox2) listbox2.destroy();
+            
+            // Test 1: Invalid selector
+            log('Test 1: Invalid template selector');
+            listbox1 = new JwListBox('#container1');
+            listbox1.on('error', (error) => {
+                log('Expected Error 1: ' + JSON.stringify(error));
+            });
+            
+            listbox1.setTemplate('#nonexistent-template').setSource(testData);
+            
+            // Test 2: Invalid template type
+            setTimeout(() => {
+                log('Test 2: Invalid template type');
+                listbox2 = new JwListBox('#container2');
+                listbox2.on('error', (error) => {
+                    log('Expected Error 2: ' + JSON.stringify(error));
+                });
+                
+                listbox2.setTemplate(123).setSource(testData); // Invalid type
+            }, 1000);
+        }
+        
+        // Auto-initialize with default rendering
+        setTimeout(() => {
+            log('Auto-initializing with default rendering...');
+            testDefaultRendering();
+        }, 500);
+    </script>
+</body>
+</html>
