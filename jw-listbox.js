@@ -12,8 +12,10 @@
     // A one-time flag to ensure styles are only ever injected once per page load.
     let stylesInjected = false;
 
-    // Essential structural CSS for the component.
+    // Essential CSS for the component - separated into structural and cosmetic rules.
     const coreCss = `
+        /* === STRUCTURAL RULES (Always Applied) === */
+        /* Core layout and positioning */
         .jw-listbox-wrapper {
             position: absolute;
             top: 0;
@@ -81,6 +83,68 @@
         .jw-listbox__load-more-button:disabled {
             cursor: not-allowed;
         }
+        
+        /* === COSMETIC RULES (Can be disabled with .jw-listbox--unstyled) === */
+        /* Default styling for visual appearance */
+        .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__row {
+            padding: 8px 12px;
+            border-bottom: 1px solid #e0e0e0;
+            transition: background-color 0.15s ease;
+        }
+        .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__row:hover {
+            background-color: #f5f5f5;
+        }
+        .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__row--selected {
+            background-color: #007bff;
+            color: white;
+        }
+        .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__row--focused {
+            box-shadow: inset 0 0 0 2px #007bff;
+        }
+        .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__header {
+            padding: 12px;
+            background-color: #f8f9fa;
+            border-bottom: 2px solid #dee2e6;
+            font-weight: 600;
+            color: #495057;
+        }
+        .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__header:hover {
+            background-color: #e9ecef;
+        }
+        .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__cell {
+            padding: 8px 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__section-header {
+            padding: 10px 12px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: 600;
+            color: #495057;
+        }
+        .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__section-header:hover {
+            background-color: #e9ecef;
+        }
+        .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__loading-overlay {
+            background-color: rgba(255, 255, 255, 0.9);
+            color: #495057;
+            font-size: 16px;
+        }
+        .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__load-more-button {
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__load-more-button:hover {
+            background-color: #0056b3;
+        }
+        .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__load-more-button:disabled {
+            background-color: #6c757d;
+            opacity: 0.6;
+        }
     `;
 
     class JwListBox {
@@ -130,7 +194,7 @@
 
             // --- Default Options ---
             const defaultOptions = {
-                displayMode: 'list', // 'list' or 'grid'
+                displayMode: 'grid', // 'list' or 'grid'
                 template: null, // Template for 'list' mode rendering
                 idField: null, // Field name to use as public identifier
                 clickToSelect: true, // Enable click-to-select behavior
@@ -139,7 +203,9 @@
                 autoSelectFirst: false, // Auto-select first row on load/search
                 showTableHeaders: true, // Show column headers in grid mode
                 columnWidths: null, // Object mapping field names to widths for grid mode
-                autoSectionHide: false // Auto-collapse/expand sections on header click
+                autoSectionHide: false, // Auto-collapse/expand sections on header click
+                clickOnCells: false, // When true, emits cellClick events for individual cell clicks in grid mode
+                useDefaultStyles: true // When false, disables default cosmetic styles (.jw-listbox--unstyled)
             };
             this._options = { ...defaultOptions, ...options };
             this._log('debug', 'Options configured', this._options);
@@ -186,7 +252,12 @@
          */
         on(eventName, callback) {
             if (typeof callback === 'function') {
-                this._events[eventName] = callback;
+                // Initialize event array if it doesn't exist
+                if (!this._events[eventName]) {
+                    this._events[eventName] = [];
+                }
+                // Add callback to the array
+                this._events[eventName].push(callback);
             } else {
                 this._handleError({
                     code: 'INVALID_CALLBACK',
@@ -264,16 +335,16 @@
                 recordCount: this.viewDm ? this.viewDm.toRecordset().length : 0
             });
 
-            // Remove event listeners
-            if (this._bodyEl) {
-                this._bodyEl.removeEventListener('click', this._handleBodyEvent);
-                this._bodyEl.removeEventListener('dblclick', this._handleBodyEvent);
-                this._bodyEl.removeEventListener('contextmenu', this._handleBodyEvent);
-                this._bodyEl.removeEventListener('mouseenter', this._handleBodyEvent, true);
-                this._bodyEl.removeEventListener('mouseleave', this._handleBodyEvent, true);
+            // Remove event listeners using the same bound references
+            if (this._bodyEl && this._boundHandlers) {
+                this._bodyEl.removeEventListener('click', this._boundHandlers.bodyClick);
+                this._bodyEl.removeEventListener('dblclick', this._boundHandlers.bodyDblClick);
+                this._bodyEl.removeEventListener('contextmenu', this._boundHandlers.bodyContextMenu);
+                this._bodyEl.removeEventListener('mouseenter', this._boundHandlers.bodyMouseEnter, true);
+                this._bodyEl.removeEventListener('mouseleave', this._boundHandlers.bodyMouseLeave, true);
             }
-            if (this._wrapperEl) {
-                this._wrapperEl.removeEventListener('keydown', this._handleKeyDown);
+            if (this._wrapperEl && this._boundHandlers) {
+                this._wrapperEl.removeEventListener('keydown', this._boundHandlers.keyDown);
             }
 
             // Remove the component's DOM structure
@@ -285,6 +356,7 @@
             this._parentEl = null;
             this._wrapperEl = null;
             this._bodyEl = null;
+            this._boundHandlers = null;
             this._events = {};
             this._options = {};
             this.dm = null;
@@ -639,6 +711,60 @@
             
             this._options.autoSectionHide = enabled;
             this._log('info', 'setAutoSectionHide completed successfully');
+            return this;
+        }
+
+        /**
+         * Enables or disables the clickOnCells feature for grid mode.
+         * @param {boolean} enabled - Whether to emit cellClick events for individual cell clicks
+         * @returns {JwListBox} The instance for chaining
+         */
+        setClickOnCells(enabled) {
+            this._log('info', 'setClickOnCells called', { enabled });
+            
+            if (typeof enabled !== 'boolean') {
+                this._handleError({
+                    code: 'INVALID_CLICK_ON_CELLS',
+                    message: `clickOnCells must be a boolean, got: ${typeof enabled}`,
+                    method: 'setClickOnCells'
+                });
+                return this;
+            }
+            
+            this._options.clickOnCells = enabled;
+            this._log('info', 'setClickOnCells completed successfully');
+            return this;
+        }
+        
+        /**
+         * Sets whether to use the default cosmetic styles.
+         * @param {boolean} useStyles - Whether to use default styles (true) or disable them (false)
+         * @returns {JwListBox} The instance for chaining
+         */
+        setUseDefaultStyles(useStyles) {
+            this._log('info', 'setUseDefaultStyles called', { useStyles });
+            
+            if (typeof useStyles !== 'boolean') {
+                this._handleError({
+                    code: 'INVALID_USE_DEFAULT_STYLES',
+                    message: `useDefaultStyles must be a boolean, got: ${typeof useStyles}`,
+                    method: 'setUseDefaultStyles'
+                });
+                return this;
+            }
+            
+            this._options.useDefaultStyles = useStyles;
+            
+            // Update the wrapper element class immediately
+            if (this._wrapperEl) {
+                if (useStyles) {
+                    this._wrapperEl.classList.remove('jw-listbox--unstyled');
+                } else {
+                    this._wrapperEl.classList.add('jw-listbox--unstyled');
+                }
+            }
+            
+            this._log('info', 'setUseDefaultStyles completed successfully');
             return this;
         }
 
@@ -1409,12 +1535,9 @@
                     }
                 }
                 
-                // Add to master data
+                // Add to master data using efficient addRow method
                 dataArray.forEach((newRow, index) => {
-                    // For DataMaster, we need to add data by converting to recordset, inserting, and recreating
-                    const masterRecordset = this.dm.toRecordset();
-                    masterRecordset.splice(masterInsertIndex + index, 0, newRow);
-                    this.dm = DataMaster.fromRecordset(masterRecordset);
+                    this.dm.addRow(newRow, masterInsertIndex + index);
                 });
                 
                 // Check if new rows should appear in current view by applying current filters
@@ -1442,11 +1565,9 @@
                         }
                     }
                     
-                    // Add to view data
+                    // Add to view data using efficient addRow method
                     dataArray.forEach((newRow, index) => {
-                        const viewRecordset = this.viewDm.toRecordset();
-                        viewRecordset.splice(viewInsertIndex + index, 0, newRow);
-                        this.viewDm = DataMaster.fromRecordset(viewRecordset);
+                        this.viewDm.addRow(newRow, viewInsertIndex + index);
                     });
                     
                     // Smart render: create and insert new DOM elements and get them back
@@ -1756,21 +1877,394 @@
             return this;
         }
 
+        // --- Sprint 11: Core Data Retrieval API ---
+
+        /**
+         * Gets the complete data object for a row by its public ID.
+         * @param {*} publicId - The row's public ID (from idField or row index)
+         * @returns {Object|null} The complete data object for the matching row, or null if not found
+         */
+        getRowData(publicId) {
+            this._log('debug', 'getRowData called', { publicId });
+            
+            if (!this.dm) {
+                this._log('warn', 'getRowData: No data source available');
+                return null;
+            }
+            
+            try {
+                // Search in master data to ensure we can find even filtered-out rows
+                const masterRecordset = this.dm.toRecordset();
+                const idField = this._options.idField;
+                
+                this._log('debug', `Searching ${masterRecordset.length} records with idField: ${idField}`);
+                
+                for (const row of masterRecordset) {
+                    let rowPublicId;
+                    
+                    if (idField && row.hasOwnProperty(idField)) {
+                        rowPublicId = row[idField];
+                    } else {
+                        // For index-based IDs, we need to find the original index
+                        // Since master data doesn't maintain original indices after operations,
+                        // we'll search by row reference if available, otherwise by position
+                        const originalIndex = masterRecordset.indexOf(row);
+                        rowPublicId = originalIndex;
+                    }
+                    
+                    if (rowPublicId === publicId) {
+                        this._log('debug', `Found row data for publicId: ${publicId}`, { rowData: row });
+                        return { ...row }; // Return a copy to prevent external mutation
+                    }
+                }
+                
+                this._log('debug', `No row found for publicId: ${publicId}`);
+                return null;
+                
+            } catch (error) {
+                this._handleError({
+                    code: 'GET_ROW_DATA_ERROR',
+                    message: `Failed to get row data: ${error.message}`,
+                    method: 'getRowData'
+                });
+                return null;
+            }
+        }
+
+        /**
+         * Gets the value of a specific field for a row by its public ID.
+         * @param {*} publicId - The row's public ID (from idField or row index)
+         * @param {string} fieldName - The name of the field to retrieve
+         * @returns {*} The value of the specified field, or undefined if not found
+         */
+        getFieldValue(publicId, fieldName) {
+            this._log('debug', 'getFieldValue called', { publicId, fieldName });
+            
+            if (typeof fieldName !== 'string') {
+                this._handleError({
+                    code: 'INVALID_FIELD_NAME',
+                    message: 'Field name must be a string',
+                    method: 'getFieldValue'
+                });
+                return undefined;
+            }
+            
+            const rowData = this.getRowData(publicId);
+            if (rowData === null) {
+                this._log('debug', `No row found for publicId: ${publicId}`);
+                return undefined;
+            }
+            
+            const fieldValue = rowData[fieldName];
+            this._log('debug', `Field value retrieved`, { publicId, fieldName, value: fieldValue });
+            
+            return fieldValue;
+        }
+
+        // --- Sprint 12: Advanced Selection & Search API ---
+
+        /**
+         * Gets an array of values from a specified column for all currently selected rows.
+         * @param {string} fieldName - The name of the field to retrieve values from
+         * @returns {Array} Array of values from the specified field for selected rows (empty if no selection)
+         */
+        getSelectedAs(fieldName) {
+            this._log('debug', 'getSelectedAs called', { fieldName, selectionSize: this._selection.size });
+            
+            if (typeof fieldName !== 'string') {
+                this._handleError({
+                    code: 'INVALID_FIELD_NAME',
+                    message: 'Field name must be a string',
+                    method: 'getSelectedAs'
+                });
+                return [];
+            }
+            
+            if (this._selection.size === 0) {
+                this._log('debug', 'No rows selected, returning empty array');
+                return [];
+            }
+            
+            try {
+                const result = [];
+                
+                // Iterate over the selection set and use _rowMap for efficient lookups
+                for (const publicId of this._selection) {
+                    // Find the row in the current view data using _rowMap
+                    let rowData = null;
+                    
+                    // Search through _rowMap to find the row with this publicId
+                    for (const [index, mapEntry] of this._rowMap.entries()) {
+                        if (mapEntry.publicId === publicId) {
+                            rowData = mapEntry.data;
+                            break;
+                        }
+                    }
+                    
+                    // If not found in view data, fall back to master data
+                    if (!rowData && this.dm) {
+                        const masterData = this.dm.toRecordset();
+                        const idField = this._options.idField;
+                        
+                        for (const row of masterData) {
+                            let rowPublicId;
+                            if (idField && row.hasOwnProperty(idField)) {
+                                rowPublicId = row[idField];
+                            } else {
+                                rowPublicId = masterData.indexOf(row);
+                            }
+                            
+                            if (rowPublicId === publicId) {
+                                rowData = row;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (rowData && rowData.hasOwnProperty(fieldName)) {
+                        result.push(rowData[fieldName]);
+                        this._log('debug', `Added field value for publicId ${publicId}`, { fieldName, value: rowData[fieldName] });
+                    } else {
+                        this._log('warn', `Field '${fieldName}' not found for selected row with publicId: ${publicId}`);
+                        result.push(undefined);
+                    }
+                }
+                
+                this._log('debug', `getSelectedAs completed`, { fieldName, resultCount: result.length, values: result });
+                return result;
+                
+            } catch (error) {
+                this._handleError({
+                    code: 'GET_SELECTED_AS_ERROR',
+                    message: `Failed to get selected values: ${error.message}`,
+                    method: 'getSelectedAs'
+                });
+                return [];
+            }
+        }
+
+        /**
+         * Performs a non-destructive search on the master dataset and returns matching data.
+         * @param {Object|Function} filter - Filter object (key-value pairs) or filter function
+         * @returns {Array} Array of data objects (recordset) for all matching rows
+         */
+        findRows(filter) {
+            this._log('debug', 'findRows called', { filter });
+            
+            if (!this.dm) {
+                this._log('warn', 'findRows: No data source available');
+                return [];
+            }
+            
+            if (!filter) {
+                this._handleError({
+                    code: 'INVALID_FILTER',
+                    message: 'Filter parameter is required',
+                    method: 'findRows'
+                });
+                return [];
+            }
+            
+            try {
+                // Use DataMaster's search method to perform the search on master data
+                const searchResult = this.dm.search(filter);
+                const resultRecordset = searchResult.toRecordset();
+                
+                this._log('debug', `findRows completed`, { 
+                    filterType: typeof filter, 
+                    matchCount: resultRecordset.length,
+                    totalRows: this.dm.toRecordset().length
+                });
+                
+                // Return a copy of the data to prevent external mutation
+                return resultRecordset.map(row => ({ ...row }));
+                
+            } catch (error) {
+                this._handleError({
+                    code: 'FIND_ROWS_ERROR',
+                    message: `Failed to find rows: ${error.message}`,
+                    method: 'findRows'
+                });
+                return [];
+            }
+        }
+
+        // --- Sprint 14: Final API & Metadata Methods ---
+
+        /**
+         * Renames fields at runtime using a mapping object.
+         * @param {Object} nameMap - Object mapping old names to new names (e.g., { oldName: 'newName' })
+         * @returns {JwListBox} The instance for chaining
+         */
+        setFieldNames(nameMap) {
+            this._log('debug', 'setFieldNames called', { nameMap });
+            
+            if (!nameMap || typeof nameMap !== 'object' || Array.isArray(nameMap)) {
+                this._handleError({
+                    code: 'INVALID_NAME_MAP',
+                    message: 'nameMap must be a non-array object',
+                    method: 'setFieldNames'
+                });
+                return this;
+            }
+            
+            if (!this.dm) {
+                this._handleError({
+                    code: 'NO_DATA_SOURCE',
+                    message: 'No data source available for field renaming',
+                    method: 'setFieldNames'
+                });
+                return this;
+            }
+            
+            try {
+                // Get current field names from DataMaster
+                const currentFields = this.dm.getFieldNames();
+                const newFields = [...currentFields];
+                let hasChanges = false;
+                
+                // Apply the name mapping
+                for (let i = 0; i < currentFields.length; i++) {
+                    const oldName = currentFields[i];
+                    if (nameMap.hasOwnProperty(oldName)) {
+                        const newName = nameMap[oldName];
+                        if (typeof newName !== 'string') {
+                            this._handleError({
+                                code: 'INVALID_NEW_NAME',
+                                message: `New field name for '${oldName}' must be a string, got: ${typeof newName}`,
+                                method: 'setFieldNames'
+                            });
+                            return this;
+                        }
+                        newFields[i] = newName;
+                        hasChanges = true;
+                        this._log('debug', `Mapping field '${oldName}' to '${newName}'`);
+                    }
+                }
+                
+                if (!hasChanges) {
+                    this._log('warn', 'No valid field mappings found in nameMap');
+                    return this;
+                }
+                
+                // Apply the new field names to both master and view DataMaster instances
+                this.dm.setFieldNames(newFields);
+                if (this.viewDm && this.viewDm !== this.dm) {
+                    this.viewDm.setFieldNames(newFields);
+                }
+                
+                // Trigger a full re-render since field names have changed
+                this._requestRender();
+                
+                this._log('info', 'setFieldNames completed successfully', { 
+                    appliedMappings: Object.keys(nameMap).filter(key => currentFields.includes(key)),
+                    newFields: newFields
+                });
+                
+            } catch (error) {
+                this._handleError({
+                    code: 'SET_FIELD_NAMES_ERROR',
+                    message: `Failed to set field names: ${error.message}`,
+                    method: 'setFieldNames'
+                });
+            }
+            
+            return this;
+        }
+
+        /**
+         * Returns a snapshot of the component's current state and metadata.
+         * @returns {Object} Object containing useful metadata about the component state
+         */
+        getDetails() {
+            this._log('debug', 'getDetails called');
+            
+            try {
+                const details = {
+                    // Data information
+                    totalRows: this.dm ? this.dm.toRecordset().length : 0,
+                    visibleRows: this.viewDm ? this.viewDm.toRecordset().length : 0,
+                    isFiltered: false,
+                    
+                    // Selection information
+                    selectionCount: this._selection.size,
+                    selectedIds: Array.from(this._selection),
+                    
+                    // Component configuration
+                    displayMode: this._options.displayMode,
+                    idField: this._options.idField,
+                    clickToSelect: this._options.clickToSelect,
+                    showTableHeaders: this._options.showTableHeaders,
+                    clickOnCells: this._options.clickOnCells,
+                    
+                    // Field information
+                    fieldNames: this.dm ? this.dm.getFieldNames() : [],
+                    fieldCount: this.dm ? this.dm.getFieldNames().length : 0,
+                    
+                    // State information
+                    focusedIndex: this._focusedIndex,
+                    hasData: !!(this.dm && this.dm.toRecordset().length > 0),
+                    isRendered: !!(this._bodyEl && this._bodyEl.children.length > 0),
+                    
+                    // Advanced features state
+                    sectionsEnabled: this._showSections,
+                    sectionCount: this._sectionStates.size,
+                    formatRulesCount: this._conditionalFormats.size,
+                    manualTagsCount: this._manualTags.size,
+                    
+                    // Component dimensions (if rendered)
+                    containerHeight: this._wrapperEl ? this._wrapperEl.offsetHeight : 0,
+                    containerWidth: this._wrapperEl ? this._wrapperEl.offsetWidth : 0
+                };
+                
+                // Determine if data is filtered
+                if (this.dm && this.viewDm && this.dm !== this.viewDm) {
+                    details.isFiltered = true;
+                }
+                
+                this._log('debug', 'getDetails completed', details);
+                return details;
+                
+            } catch (error) {
+                this._handleError({
+                    code: 'GET_DETAILS_ERROR',
+                    message: `Failed to get component details: ${error.message}`,
+                    method: 'getDetails'
+                });
+                
+                // Return minimal details object on error
+                return {
+                    error: true,
+                    totalRows: 0,
+                    visibleRows: 0,
+                    isFiltered: false,
+                    selectionCount: 0,
+                    selectedIds: [],
+                    displayMode: this._options.displayMode || 'list',
+                    hasData: false,
+                    isRendered: false
+                };
+            }
+        }
+
         // --- Private Helper Methods ---
 
         /**
-         * Fires an event, triggering its registered callback.
+         * Fires an event, triggering all registered callbacks.
          * @private
          * @param {string} eventName - The name of the event to fire.
-         * @param {*} [payload] - The data to pass to the callback.
+         * @param {*} [payload] - The data to pass to the callbacks.
          */
         _emit(eventName, payload) {
-            if (this._events[eventName]) {
-                try {
-                    this._events[eventName](payload);
-                } catch (error) {
-                    console.error(`JwListBox: Error in '${eventName}' event handler:`, error);
-                }
+            if (this._events[eventName] && Array.isArray(this._events[eventName])) {
+                // Iterate over all registered callbacks for this event
+                this._events[eventName].forEach((callback, index) => {
+                    try {
+                        callback(payload);
+                    } catch (error) {
+                        console.error(`JwListBox: Error in '${eventName}' event handler #${index}:`, error);
+                    }
+                });
             }
         }
 
@@ -1842,6 +2336,12 @@
             this._wrapperEl = document.createElement('div');
             this._wrapperEl.className = 'jw-listbox-wrapper';
             this._wrapperEl.setAttribute('tabindex', '0'); // Make focusable for keyboard events
+            
+            // Apply unstyled class if useDefaultStyles is false
+            if (!this._options.useDefaultStyles) {
+                this._wrapperEl.classList.add('jw-listbox--unstyled');
+            }
+            
             this._parentEl.appendChild(this._wrapperEl);
 
             // Create the body element where content will be rendered.
@@ -1858,15 +2358,25 @@
          * @private
          */
         _setupEventDelegation() {
+            // Store bound method references for proper cleanup
+            this._boundHandlers = {
+                bodyClick: (event) => this._handleBodyEvent('click', event),
+                bodyDblClick: (event) => this._handleBodyEvent('dblclick', event),
+                bodyContextMenu: (event) => this._handleBodyEvent('contextmenu', event),
+                bodyMouseEnter: (event) => this._handleBodyEvent('mouseenter', event),
+                bodyMouseLeave: (event) => this._handleBodyEvent('mouseleave', event),
+                keyDown: (event) => this._handleKeyDown(event)
+            };
+
             // Event delegation on the body element for row/cell events
-            this._bodyEl.addEventListener('click', (event) => this._handleBodyEvent('click', event));
-            this._bodyEl.addEventListener('dblclick', (event) => this._handleBodyEvent('dblclick', event));
-            this._bodyEl.addEventListener('contextmenu', (event) => this._handleBodyEvent('contextmenu', event));
-            this._bodyEl.addEventListener('mouseenter', (event) => this._handleBodyEvent('mouseenter', event), true);
-            this._bodyEl.addEventListener('mouseleave', (event) => this._handleBodyEvent('mouseleave', event), true);
+            this._bodyEl.addEventListener('click', this._boundHandlers.bodyClick);
+            this._bodyEl.addEventListener('dblclick', this._boundHandlers.bodyDblClick);
+            this._bodyEl.addEventListener('contextmenu', this._boundHandlers.bodyContextMenu);
+            this._bodyEl.addEventListener('mouseenter', this._boundHandlers.bodyMouseEnter, true);
+            this._bodyEl.addEventListener('mouseleave', this._boundHandlers.bodyMouseLeave, true);
 
             // Keyboard events on the wrapper (which is focusable)
-            this._wrapperEl.addEventListener('keydown', (event) => this._handleKeyDown(event));
+            this._wrapperEl.addEventListener('keydown', this._boundHandlers.keyDown);
         }
 
         /**
@@ -1922,6 +2432,11 @@
             // Handle selection for click events
             if (eventType === 'click' && this._options.clickToSelect && !this._options.preventAutoSelection && payload) {
                 this._handleRowSelection(payload, event);
+            }
+            
+            // Emit cellClick event if clickOnCells is enabled and this is a cell click in grid mode
+            if (eventType === 'click' && this._options.clickOnCells && cellElement && cellElement !== rowElement && this._options.displayMode === 'grid') {
+                this._emit('cellClick', payload);
             }
             
             this._emit(rowEventName, payload);
