@@ -1,9 +1,3 @@
-Excellent news! Reaching MVP is a major milestone. Congratulations on guiding Project Janus to this point.
-
-Creating clear, welcoming, and effective documentation is just as important as writing the code itself. Here is a draft of the `README.md` file, designed to give a new developer everything they need to get excited about the project, understand its philosophy, and get started quickly.
-
----
-
 # JwListBox: A Modern, Dependency-Free List & Grid Component
 
 **JwListBox** is a high-performance, flexible, and developer-friendly JavaScript component for displaying interactive lists and grids of data. It is built from the ground up with modern standards, has zero dependencies, and is designed to be a powerful engine for any data presentation task.
@@ -168,9 +162,3 @@ The component will now be rendered with only essential structural styles, giving
 ## 📚 Full Documentation
 
 For a complete list of all methods, options, and events, please see the **[API Reference](api-reference.md)**.
-
-## 🤝 Contributing
-
-Project Janus is currently under active development. Please see the project's architectural documents for contribution guidelines.
-
----

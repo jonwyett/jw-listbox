@@ -1,4 +1,7 @@
 /**
+ * ver 5.1.0 25/07/16
+ * - add slice
+ * - add splice
  * ver 5.0.1 25/07/10
  * - remove refreces to table generator
  * ver 5.0.0 25/07/10
@@ -3174,6 +3177,124 @@
             }
 
             return this;
+        }
+        
+        /**
+         * Extracts a section of the DataMaster's rows (non-destructive)
+         * @param {number} begin - The start index (inclusive)
+         * @param {number} end - The end index (exclusive)
+         * @returns {DataMaster} New DataMaster instance with the extracted rows
+         */
+        slice(begin, end) {
+            if (!Array.isArray(this._table) || !Array.isArray(this._fields)) {
+                return this._handleError('Invalid table or fields state', 'StateError', 'DataMaster');
+            }
+            
+            // Validate begin parameter
+            if (typeof begin !== 'number') {
+                return this._handleError('Begin index must be a number', 'UserError', 'DataMaster');
+            }
+            
+            // Validate end parameter (optional)
+            if (end !== undefined && typeof end !== 'number') {
+                return this._handleError('End index must be a number', 'UserError', 'DataMaster');
+            }
+            
+            try {
+                // Use Array.prototype.slice behavior
+                const slicedTable = this._table.slice(begin, end);
+                
+                // Create a deep copy of the fields
+                const fieldsCopy = deepCopy(this._fields);
+                if (fieldsCopy.error) {
+                    return this._handleError(fieldsCopy.message, 'InternalError', 'DataMaster');
+                }
+                
+                // Create a deep copy of the sliced table
+                const tableCopy = deepCopy(slicedTable);
+                if (tableCopy.error) {
+                    return this._handleError(tableCopy.message, 'InternalError', 'DataMaster');
+                }
+                
+                return new DataMaster(tableCopy, fieldsCopy, this._options);
+            } catch (error) {
+                return this._handleError('Slice operation failed: ' + error.message, 'InternalError', 'DataMaster');
+            }
+        }
+        
+        /**
+         * Changes the contents of the DataMaster's internal table by removing/replacing/adding rows
+         * @param {number} start - The start index
+         * @param {number} deleteCount - The number of rows to remove
+         * @param {...Array} items - The new rows to add
+         * @returns {DataMaster} this for chaining
+         */
+        splice(start, deleteCount, ...items) {
+            if (!Array.isArray(this._table) || !Array.isArray(this._fields)) {
+                return this._handleError('Invalid table or fields state', 'StateError', 'DataMaster');
+            }
+            
+            // Validate start parameter
+            if (typeof start !== 'number') {
+                return this._handleError('Start index must be a number', 'UserError', 'DataMaster');
+            }
+            
+            // Validate deleteCount parameter (optional)
+            if (deleteCount !== undefined && typeof deleteCount !== 'number') {
+                return this._handleError('Delete count must be a number', 'UserError', 'DataMaster');
+            }
+            
+            try {
+                // Process items to add - ensure they are properly formatted arrays
+                const processedItems = [];
+                for (const item of items) {
+                    if (Array.isArray(item)) {
+                        // Ensure the array matches the field count
+                        const processedRow = [...item];
+                        
+                        // Trim if too long
+                        if (processedRow.length > this._fields.length) {
+                            processedRow.splice(this._fields.length);
+                        } else if (processedRow.length < this._fields.length) {
+                            // Pad with nulls if too short
+                            for (let i = processedRow.length; i < this._fields.length; i++) {
+                                processedRow.push(null);
+                            }
+                        }
+                        
+                        processedItems.push(processedRow);
+                    } else if (typeof item === 'object' && item !== null) {
+                        // Convert object to array format
+                        const processedRow = new Array(this._fields.length);
+                        
+                        // Initialize with nulls
+                        for (let i = 0; i < processedRow.length; i++) {
+                            processedRow[i] = null;
+                        }
+                        
+                        // Fill from object using field names
+                        Object.keys(item).forEach(key => {
+                            const fieldIndex = this._fields.indexOf(key);
+                            if (fieldIndex !== -1) {
+                                processedRow[fieldIndex] = item[key];
+                            }
+                        });
+                        
+                        processedItems.push(processedRow);
+                    } else {
+                        // Invalid item type
+                        return this._handleError('Splice items must be arrays or objects', 'UserError', 'DataMaster');
+                    }
+                }
+                
+                // Use Array.prototype.splice behavior
+                this._table.splice(start, deleteCount, ...processedItems);
+                
+            } catch (error) {
+                return this._handleError('Splice operation failed: ' + error.message, 'InternalError', 'DataMaster');
+            }
+            
+            return this; // For chaining
         }
     }
     

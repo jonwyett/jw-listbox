@@ -74,14 +74,28 @@
             justify-content: center;
             z-index: 1000;
         }
-        .jw-listbox__load-more {
+        .jw-listbox__paging-control {
             text-align: center;
-        }
-        .jw-listbox__load-more-button {
             cursor: pointer;
         }
-        .jw-listbox__load-more-button:disabled {
-            cursor: not-allowed;
+        .jw-listbox__paging-cell {
+            text-align: center;
+        }
+        
+        /* Grid sticky header structure */
+        .jw-listbox__grid-container {
+            height: 100%;
+            overflow: auto;
+        }
+        .jw-listbox__grid-container .jw-listbox__table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        .jw-listbox__grid-container .jw-listbox__header {
+            position: sticky;
+            top: 0;
+            z-index: 1;
         }
         
         /* === COSMETIC RULES (Can be disabled with .jw-listbox--unstyled) === */
@@ -100,6 +114,17 @@
         }
         .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__row--focused {
             box-shadow: inset 0 0 0 2px #007bff;
+        }
+        .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__paging-control {
+            padding: 12px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 500;
+            color: #6c757d;
+        }
+        .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__paging-control:hover {
+            background-color: #e9ecef;
+            color: #495057;
         }
         .jw-listbox-wrapper:not(.jw-listbox--unstyled) .jw-listbox__header {
             padding: 12px;
@@ -172,6 +197,12 @@
         _showSections = false; // Whether to show section headers
         _sectionStates = new Map(); // Maps section values to collapsed/expanded state
         _autoSectionHide = false; // Auto-collapse sections on header click
+        
+        // --- Paging (Sprint 25) ---
+        _pagingOptions = null; // Paging configuration object
+        _currentPage = 0; // Current page index (0-based) - kept for compatibility
+        _windowStart = 0; // Current window start index for virtual pagination
+        _totalRecords = 0; // Total records for server-side paging
 
         /**
          * Initializes a new JwListBox instance.
@@ -303,8 +334,42 @@
                 return;
             }
 
-            const recordCount = this.viewDm.toRecordset().length;
+            // Handle client-side paging
+            let renderDm = this.viewDm; // Default to full viewDm
+            
+            if (this._pagingOptions && !this._pagingOptions.dataProvider) {
+                this._log('info', 'Applying client-side virtual pagination');
+                
+                // Calculate virtual pagination window from the full viewDm
+                const pageSize = this._pagingOptions.pageSize;
+                const windowStart = this._windowStart;
+                const windowEnd = windowStart + pageSize;
+                
+                // Use DataMaster's slice method to get the window
+                renderDm = this.viewDm.slice(windowStart, windowEnd);
+                
+                this._log('debug', 'Client-side virtual paging details', {
+                    totalRecords: this.viewDm.length(),
+                    pageSize: pageSize,
+                    windowStart: windowStart,
+                    windowEnd: windowEnd,
+                    windowRecords: renderDm.length()
+                });
+                
+                // Update total records count
+                this._totalRecords = this.viewDm.length();
+            }
+
+            const recordCount = renderDm.toRecordset().length;
             this._log('info', `Rendering ${recordCount} records in ${this._options.displayMode} mode`);
+
+            // Temporarily replace viewDm with renderDm for rendering
+            const originalViewDm = this.viewDm;
+            this.viewDm = renderDm;
+
+            // Rebuild row map with correct index offset for virtual pagination
+            const indexOffset = this._pagingOptions && !this._pagingOptions.dataProvider ? this._windowStart : 0;
+            this._buildRowMap(false, indexOffset);
 
             // Render based on display mode
             if (this._options.displayMode === 'list') {
@@ -316,14 +381,34 @@
                 this._bodyEl.innerHTML = `<p>Unknown display mode: ${this._options.displayMode}</p>`;
             }
 
+            // Restore original viewDm
+            this.viewDm = originalViewDm;
+
             this._isDirty = false;
             this._log('info', 'Render process complete');
+            
+            // Update visual selection after render to maintain selection across window changes
+            this._updateVisualSelection();
             
             // Emit render lifecycle event
             this._emit('render', {
                 displayMode: this._options.displayMode,
                 recordCount: this.viewDm ? this.viewDm.toRecordset().length : 0
             });
+            
+            // Emit windowChange event for paging (both client-side and server-side)
+            if (this._pagingOptions) {
+                const windowStart = this._windowStart;
+                const windowEnd = Math.min(windowStart + this._pagingOptions.pageSize, this._totalRecords);
+                
+                this._emit('windowChange', {
+                    windowStart: windowStart,
+                    windowEnd: windowEnd,
+                    totalRecords: this._totalRecords,
+                    pageSize: this._pagingOptions.pageSize,
+                    currentPage: Math.floor(windowStart / this._pagingOptions.pageSize)
+                });
+            }
         }
 
         /**
@@ -976,6 +1061,28 @@
                     this._sectionStates.clear();
                 }
                 
+                // Handle server-side paging integration
+                if (this._pagingOptions && this._pagingOptions.dataProvider) {
+                    // Reset to first page for server-side paging
+                    this._windowStart = 0;
+                    this._currentPage = 0;
+                    
+                    // Store sort parameters for server-side requests
+                    this._sortParams = {
+                        fieldOrFields: fieldOrFields,
+                        isDescending: isDescending,
+                        showSections: showSections
+                    };
+                    
+                    // Clear selection
+                    this._selection.clear();
+                    this._focusedIndex = -1;
+                    
+                    // Load data with new sort parameters
+                    this._loadServerSideWindow();
+                    return this;
+                }
+                
                 // Rebuild row map with new order and clear selection
                 this._selection.clear();
                 this._focusedIndex = -1;
@@ -1010,6 +1117,24 @@
             try {
                 if (!this.dm) {
                     throw new Error('No data available to search');
+                }
+                
+                // Handle server-side paging integration
+                if (this._pagingOptions && this._pagingOptions.dataProvider) {
+                    // Reset to first page for server-side paging
+                    this._windowStart = 0;
+                    this._currentPage = 0;
+                    
+                    // Store filter parameters for server-side requests
+                    this._filterParams = filter;
+                    
+                    // Clear selection
+                    this._selection.clear();
+                    this._focusedIndex = -1;
+                    
+                    // Load data with new filter parameters
+                    this._loadServerSideWindow();
+                    return this;
                 }
                 
                 // Search the master data and update view
@@ -2393,6 +2518,13 @@
                 return; // Section header clicks don't trigger row events
             }
             
+            // Check for paging control clicks (before row check)
+            const pagingControlElement = event.target.closest('.jw-listbox__paging-control');
+            if (pagingControlElement && eventType === 'click') {
+                this._handlePagingControlClick(pagingControlElement, event);
+                return; // Paging clicks don't trigger row events
+            }
+            
             // Check for table header clicks (before row check)
             const headerElement = event.target.closest('.jw-listbox__header');
             if (headerElement && eventType === 'click') {
@@ -2491,9 +2623,10 @@
          * Implements the three-tiered ID system: internalId, publicId, index.
          * @private
          * @param {boolean} [preserveElements=false] - Whether to try preserving existing DOM element references
+         * @param {number} [indexOffset=0] - Offset to add to row indices for virtual pagination
          */
-        _buildRowMap(preserveElements = false) {
-            this._log('debug', 'Building row map', { preserveElements });
+        _buildRowMap(preserveElements = false, indexOffset = 0) {
+            this._log('debug', 'Building row map', { preserveElements, indexOffset });
             
             // Store existing element references if preserving
             const existingElements = new Map();
@@ -2528,16 +2661,17 @@
                 const internalId = ++this._internalIdCounter;
                 
                 // Determine public ID based on idField configuration
+                const adjustedIndex = index + indexOffset; // Use adjusted index for virtual pagination
                 let publicId;
                 if (idField && row.hasOwnProperty(idField)) {
                     publicId = row[idField];
-                    this._log('debug', `Using field '${idField}' value '${publicId}' as public ID for row ${index}`);
+                    this._log('debug', `Using field '${idField}' value '${publicId}' as public ID for row ${adjustedIndex}`);
                 } else {
-                    publicId = index;
+                    publicId = adjustedIndex; // Use adjusted index when no ID field
                     if (idField) {
-                        this._log('warn', `ID field '${idField}' not found in row data, using index ${index} as public ID`);
+                        this._log('warn', `ID field '${idField}' not found in row data, using adjusted index ${adjustedIndex} as public ID`);
                     } else {
-                        this._log('debug', `Using index ${index} as public ID for row ${index}`);
+                        this._log('debug', `Using adjusted index ${adjustedIndex} as public ID for row ${adjustedIndex}`);
                     }
                 }
                 
@@ -2653,6 +2787,11 @@
                 this._log('info', `Rendered ${renderedCount} list items`);
             }
             
+            // Add paging controls if enabled
+            if (this._pagingOptions) {
+                this._addPagingControls(ulElement, 'list');
+            }
+            
             this._bodyEl.appendChild(ulElement);
             
             // Handle auto-selection and visual updates
@@ -2668,19 +2807,23 @@
         _renderGridMode() {
             this._log('debug', 'Starting grid mode rendering');
             
-            // Create the main <table> container
-            const tableElement = document.createElement('table');
-            tableElement.className = 'jw-listbox__table';
-            tableElement.setAttribute('role', 'grid');
-            tableElement.setAttribute('aria-multiselectable', 'true');
-            this._log('debug', 'Created <table> container with ARIA attributes');
-            
             const recordset = this.viewDm.toRecordset();
             this._log('debug', `Rendering ${recordset.length} records as table rows`);
             
             // Get field names from first record
             const fieldNames = recordset.length > 0 ? Object.keys(recordset[0]) : [];
             this._log('debug', `Detected fields: [${fieldNames.join(', ')}]`);
+            
+            // Create the grid container for sticky headers
+            const gridContainer = document.createElement('div');
+            gridContainer.className = 'jw-listbox__grid-container';
+            gridContainer.setAttribute('role', 'grid');
+            gridContainer.setAttribute('aria-multiselectable', 'true');
+            this._log('debug', 'Created grid container with ARIA attributes');
+            
+            // Create the main table with sticky headers
+            const tableElement = document.createElement('table');
+            tableElement.className = 'jw-listbox__table';
             
             // Create table header if enabled
             if (this._options.showTableHeaders && fieldNames.length > 0) {
@@ -2699,7 +2842,7 @@
                 
                 theadElement.appendChild(headerRowElement);
                 tableElement.appendChild(theadElement);
-                this._log('debug', 'Created table headers');
+                this._log('debug', 'Created sticky table headers');
             }
             
             // Create table body
@@ -2824,8 +2967,15 @@
                 this._log('info', `Rendered ${renderedCount} table rows`);
             }
             
+            // Add paging controls if enabled
+            if (this._pagingOptions) {
+                this._addPagingControls(tbodyElement, 'grid');
+            }
+            
             tableElement.appendChild(tbodyElement);
-            this._bodyEl.appendChild(tableElement);
+            gridContainer.appendChild(tableElement);
+            
+            this._bodyEl.appendChild(gridContainer);
             
             // Apply column widths if specified
             this._applyColumnWidths();
@@ -2834,6 +2984,287 @@
             this._handlePostRenderUpdates();
             
             this._log('debug', 'Grid mode rendering complete');
+        }
+
+        /**
+         * Adds paging controls to the specified container element.
+         * @private
+         * @param {HTMLElement} container - The container element (ul or table)
+         * @param {string} mode - The display mode ('list' or 'grid')
+         */
+        _addPagingControls(container, mode) {
+            this._log('debug', 'Adding paging controls', { mode });
+            
+            // Check if we need to show Load Previous control
+            const showLoadPrevious = this._windowStart > 0;
+            
+            // Check if we need to show Load More control
+            const showLoadMore = this._hasMorePages();
+            
+            this._log('debug', 'Paging control visibility', { 
+                showLoadPrevious, 
+                showLoadMore, 
+                currentPage: this._currentPage,
+                totalRecords: this._totalRecords,
+                pageSize: this._pagingOptions.pageSize
+            });
+            
+            // Add Load Previous control at the beginning if needed
+            if (showLoadPrevious) {
+                const loadPreviousElement = this._createPagingControl('previous', mode);
+                container.insertBefore(loadPreviousElement, container.firstChild);
+            }
+            
+            // Add Load More control at the end if needed
+            if (showLoadMore) {
+                const loadMoreElement = this._createPagingControl('more', mode);
+                container.appendChild(loadMoreElement);
+            }
+        }
+
+        /**
+         * Creates a paging control element.
+         * @private
+         * @param {string} type - The control type ('previous' or 'more')
+         * @param {string} mode - The display mode ('list' or 'grid')
+         * @returns {HTMLElement} The paging control element
+         */
+        _createPagingControl(type, mode) {
+            const isPrevious = type === 'previous';
+            const template = isPrevious ? this._pagingOptions.loadPreviousTemplate : this._pagingOptions.loadMoreTemplate;
+            
+            // Create arrow text for virtual pagination
+            const arrowText = isPrevious ? '▲ Load Previous ▲' : '▼ Load More ▼';
+            
+            let element;
+            if (mode === 'list') {
+                element = document.createElement('li');
+                element.className = `jw-listbox__paging-control jw-listbox__paging-control--${type}`;
+                element.setAttribute('data-action', type);
+                element.style.textAlign = 'center';
+                element.style.cursor = 'pointer';
+            } else {
+                element = document.createElement('tr');
+                element.className = `jw-listbox__paging-control jw-listbox__paging-control--${type}`;
+                element.setAttribute('data-action', type);
+                element.style.cursor = 'pointer';
+                
+                // Create a single cell that spans all columns
+                const cell = document.createElement('td');
+                cell.className = 'jw-listbox__paging-cell';
+                cell.style.textAlign = 'center';
+                
+                // Get column count from the table headers or data
+                const recordset = this.viewDm.toRecordset();
+                const columnCount = recordset.length > 0 ? Object.keys(recordset[0]).length : 1;
+                cell.setAttribute('colspan', columnCount);
+                
+                element.appendChild(cell);
+            }
+            
+            // Use template if provided, otherwise use arrow text
+            let content;
+            if (template) {
+                // Templates will be implemented in later sprints
+                content = template;
+            } else {
+                content = this._escapeHtml(arrowText);
+            }
+            
+            // Set the content
+            const targetElement = mode === 'list' ? element : element.querySelector('.jw-listbox__paging-cell');
+            targetElement.innerHTML = content;
+            
+            return element;
+        }
+
+        /**
+         * Checks if there are more pages available.
+         * @private
+         * @returns {boolean} True if there are more pages
+         */
+        _hasMorePages() {
+            if (!this._pagingOptions) return false;
+            
+            const totalRecords = this._totalRecords;
+            const pageSize = this._pagingOptions.pageSize;
+            const windowStart = this._windowStart;
+            
+            // Check if there are more records beyond the current window
+            return windowStart + pageSize < totalRecords;
+        }
+
+        /**
+         * Loads more data by moving the virtual window forward.
+         * @private
+         */
+        async _loadMoreData() {
+            if (!this._hasMorePages()) {
+                this._log('debug', 'No more pages available');
+                return;
+            }
+            
+            const halfPageSize = Math.floor(this._pagingOptions.pageSize / 2);
+            
+            // Move the window forward by half-page (same for both modes)
+            this._windowStart += halfPageSize;
+            
+            this._log('debug', 'Loading more data', {
+                oldWindowStart: this._windowStart - halfPageSize,
+                newWindowStart: this._windowStart,
+                pageSize: this._pagingOptions.pageSize,
+                halfPageSize: halfPageSize
+            });
+            
+            // Check if we're in server-side paging mode
+            if (this._pagingOptions.dataProvider) {
+                // Emit 'more' event before server-side data loading
+                this._emit('more', {
+                    page: Math.floor(this._windowStart / this._pagingOptions.pageSize),
+                    pageSize: this._pagingOptions.pageSize,
+                    windowStart: this._windowStart,
+                    windowEnd: this._windowStart + this._pagingOptions.pageSize,
+                    totalRecords: this._totalRecords
+                });
+                
+                // Server-side paging - load data for current window
+                await this._loadServerSideWindow();
+            } else {
+                // Client-side paging - re-render with the new window position
+                this._requestRender();
+            }
+        }
+
+        /**
+         * Loads previous data by moving the virtual window backward.
+         * @private
+         */
+        async _loadPreviousData() {
+            if (this._windowStart <= 0) {
+                this._log('debug', 'No previous pages available');
+                return;
+            }
+            
+            const halfPageSize = Math.floor(this._pagingOptions.pageSize / 2);
+            
+            // Move the window backward by half-page (same for both modes)
+            this._windowStart = Math.max(0, this._windowStart - halfPageSize);
+            
+            this._log('debug', 'Loading previous data', {
+                oldWindowStart: this._windowStart + halfPageSize,
+                newWindowStart: this._windowStart,
+                pageSize: this._pagingOptions.pageSize,
+                halfPageSize: halfPageSize
+            });
+            
+            // Check if we're in server-side paging mode
+            if (this._pagingOptions.dataProvider) {
+                // Emit 'previous' event before server-side data loading
+                this._emit('previous', {
+                    page: Math.floor(this._windowStart / this._pagingOptions.pageSize),
+                    pageSize: this._pagingOptions.pageSize,
+                    windowStart: this._windowStart,
+                    windowEnd: this._windowStart + this._pagingOptions.pageSize,
+                    totalRecords: this._totalRecords
+                });
+                
+                // Server-side paging - load data for current window
+                await this._loadServerSideWindow();
+            } else {
+                // Client-side paging - re-render with the new window position
+                this._requestRender();
+            }
+        }
+
+        /**
+         * Loads data from the server-side dataProvider for the current window.
+         * @private
+         */
+        async _loadServerSideWindow() {
+            if (!this._pagingOptions || !this._pagingOptions.dataProvider) {
+                this._log('warn', 'Cannot load server-side window - no dataProvider configured');
+                return;
+            }
+            
+            const windowStart = this._windowStart;
+            const windowEnd = windowStart + this._pagingOptions.pageSize;
+            
+            this._log('info', `Loading server-side window: ${windowStart}-${windowEnd}`);
+            
+            try {
+                // Prepare context for dataProvider (using window position)
+                const context = {
+                    page: Math.floor(windowStart / this._pagingOptions.pageSize),
+                    pageSize: this._pagingOptions.pageSize,
+                    windowStart: windowStart,
+                    windowEnd: windowEnd,
+                    sort: this._getSortContext(),
+                    filter: this._getFilterContext()
+                };
+                
+                this._log('debug', 'Calling dataProvider with context', context);
+                
+                // Call the dataProvider function
+                const result = await this._pagingOptions.dataProvider(context);
+                
+                // Validate result
+                if (!result || typeof result !== 'object') {
+                    throw new Error('dataProvider must return an object');
+                }
+                
+                if (!Array.isArray(result.data)) {
+                    throw new Error('dataProvider result must contain a data array');
+                }
+                
+                if (typeof result.totalRecords !== 'number' || result.totalRecords < 0) {
+                    throw new Error('dataProvider result must contain a valid totalRecords number');
+                }
+                
+                // Update internal state
+                this._totalRecords = result.totalRecords;
+                this._currentPage = Math.floor(windowStart / this._pagingOptions.pageSize);
+                
+                this._log('info', `Server-side window ${windowStart}-${windowEnd} loaded successfully`, {
+                    recordsLoaded: result.data.length,
+                    totalRecords: result.totalRecords
+                });
+                
+                // Update data masters with new data
+                this.dm = DataMaster.fromRecordset(result.data);
+                this.viewDm = this.dm;
+                
+                // Rebuild row map for new data
+                this._buildRowMap();
+                
+                // Trigger re-render
+                this._requestRender();
+                
+            } catch (error) {
+                this._log('error', `Failed to load server-side window ${windowStart}-${windowEnd}`, error);
+                this._handleError({
+                    code: 'SERVER_SIDE_LOAD_FAILED',
+                    message: `Failed to load window ${windowStart}-${windowEnd}: ${error.message}`,
+                    method: '_loadServerSideWindow'
+                });
+            }
+        }
+
+        /**
+         * Gets the current sort context for server-side requests.
+         * @private
+         * @returns {object} Sort context object
+         */
+        _getSortContext() {
+            return this._sortParams || {};
+        }
+
+        /**
+         * Gets the current filter context for server-side requests.
+         * @private
+         * @returns {object} Filter context object
+         */
+        _getFilterContext() {
+            return this._filterParams || {};
         }
 
         /**
@@ -3289,7 +3720,7 @@
                 typedPublicId = parseInt(publicId);
             }
             
-            const rowData = this._rowMap.get(index);
+            const rowData = this._getRowDataFromMap(internalId, index);
             
             return {
                 id: typedPublicId,
@@ -3325,6 +3756,65 @@
                 value: value,
                 cellElement: cellElement
             };
+        }
+
+        /**
+         * Handles paging control click events.
+         * @private
+         * @param {HTMLElement} buttonElement - The clicked paging button element
+         * @param {Event} event - The original click event
+         */
+        async _handlePagingControlClick(buttonElement, event) {
+            const action = buttonElement.getAttribute('data-action');
+            
+            this._log('debug', `Paging control clicked: ${action}`, { action, windowStart: this._windowStart });
+            
+            // Prevent default behavior
+            event.preventDefault();
+            
+            // Show loading state
+            const originalContent = buttonElement.innerHTML;
+            const loadingText = this._pagingOptions.loadingText || 'Loading...';
+            const loadingTemplate = this._pagingOptions.loadingTemplate;
+            
+            if (loadingTemplate) {
+                buttonElement.innerHTML = loadingTemplate;
+            } else {
+                buttonElement.innerHTML = `<span class="jw-listbox__loading">${loadingText}</span>`;
+            }
+            
+            // Disable the button during loading
+            buttonElement.disabled = true;
+            
+            try {
+                // Handle the action based on paging mode
+                if (!this._pagingOptions.dataProvider) {
+                    this._log('info', `Handling client-side virtual paging action: ${action}`);
+                    
+                    if (action === 'previous') {
+                        await this._loadPreviousData();
+                    } else if (action === 'more') {
+                        await this._loadMoreData();
+                    }
+                } else {
+                    this._log('info', `Handling server-side paging action: ${action}`);
+                    
+                    if (action === 'previous') {
+                        await this._loadPreviousData();
+                    } else if (action === 'more') {
+                        await this._loadMoreData();
+                    }
+                }
+            } catch (error) {
+                this._log('error', `Error handling paging action: ${action}`, error);
+                
+                // Restore original button content on error
+                buttonElement.innerHTML = originalContent;
+                buttonElement.disabled = false;
+                
+                // Re-throw to be handled by calling code
+                throw error;
+            }
         }
 
         /**
@@ -3508,33 +3998,32 @@
                 return;
             }
             
-            const table = this._bodyEl.querySelector('.jw-listbox__table');
-            if (!table) {
-                return;
-            }
-            
             this._log('debug', 'Applying column widths', { columnWidths: this._options.columnWidths });
             
-            // Apply widths to header cells
-            const headerCells = table.querySelectorAll('.jw-listbox__header');
-            headerCells.forEach(header => {
-                const field = header.getAttribute('data-field');
-                if (field && this._options.columnWidths[field]) {
-                    header.style.width = this._options.columnWidths[field];
-                    this._log('debug', `Set width for header ${field}: ${this._options.columnWidths[field]}`);
-                }
-            });
-            
-            // Apply widths to all cells in the first row to set column widths
-            const firstRow = table.querySelector('.jw-listbox__row');
-            if (firstRow) {
-                const cells = firstRow.querySelectorAll('.jw-listbox__cell');
-                cells.forEach(cell => {
-                    const field = cell.getAttribute('data-field');
+            // Apply widths to the single table structure (sticky headers)
+            const table = this._bodyEl.querySelector('.jw-listbox__grid-container .jw-listbox__table');
+            if (table) {
+                // Apply widths to header cells
+                const headerCells = table.querySelectorAll('.jw-listbox__header');
+                headerCells.forEach(header => {
+                    const field = header.getAttribute('data-field');
                     if (field && this._options.columnWidths[field]) {
-                        cell.style.width = this._options.columnWidths[field];
+                        header.style.width = this._options.columnWidths[field];
+                        this._log('debug', `Set width for header ${field}: ${this._options.columnWidths[field]}`);
                     }
                 });
+                
+                // Apply widths to all cells in the first row to set column widths
+                const firstRow = table.querySelector('.jw-listbox__row');
+                if (firstRow) {
+                    const cells = firstRow.querySelectorAll('.jw-listbox__cell');
+                    cells.forEach(cell => {
+                        const field = cell.getAttribute('data-field');
+                        if (field && this._options.columnWidths[field]) {
+                            cell.style.width = this._options.columnWidths[field];
+                        }
+                    });
+                }
             }
         }
 
@@ -4310,6 +4799,359 @@
             }
             
             return this;
+        }
+
+        /**
+         * Enables, disables, or configures paging for the listbox.
+         * @param {object|boolean|null} options - Paging configuration object, false to disable, or null to disable
+         * @returns {JwListBox} The instance for chaining
+         */
+        usePaging(options) {
+            this._log('info', 'usePaging called', { options });
+            
+            // Handle disable paging
+            if (options === false || options === null) {
+                this._log('info', 'Disabling paging');
+                this._pagingOptions = null;
+                this._currentPage = 0;
+                this._totalRecords = 0;
+                this._requestRender();
+                return this;
+            }
+            
+            // Validate options
+            if (typeof options !== 'object' || options === null) {
+                this._handleError({
+                    code: 'INVALID_PAGING_OPTIONS',
+                    message: 'usePaging() requires an options object, false, or null',
+                    method: 'usePaging'
+                });
+                return this;
+            }
+            
+            // Default paging options
+            const defaultPagingOptions = {
+                pageSize: 50,
+                loadMoreText: 'Load More',
+                loadPreviousText: 'Load Previous',
+                loadMoreTemplate: null,
+                loadPreviousTemplate: null,
+                loadingText: 'Loading...',
+                loadingTemplate: null,
+                dataProvider: null // Function for server-side paging
+            };
+            
+            // If paging is already active, merge with existing options
+            if (this._pagingOptions) {
+                this._pagingOptions = { ...this._pagingOptions, ...options };
+                this._log('info', 'Updated existing paging options');
+            } else {
+                this._pagingOptions = { ...defaultPagingOptions, ...options };
+                this._log('info', 'Enabled paging with new options');
+            }
+            
+            // Validate required options
+            if (!Number.isInteger(this._pagingOptions.pageSize) || this._pagingOptions.pageSize <= 0) {
+                this._handleError({
+                    code: 'INVALID_PAGE_SIZE',
+                    message: 'pageSize must be a positive integer',
+                    method: 'usePaging'
+                });
+                return this;
+            }
+            
+            // If dataProvider is provided, validate it's a function
+            if (this._pagingOptions.dataProvider && typeof this._pagingOptions.dataProvider !== 'function') {
+                this._handleError({
+                    code: 'INVALID_DATA_PROVIDER',
+                    message: 'dataProvider must be a function',
+                    method: 'usePaging'
+                });
+                return this;
+            }
+            
+            // Reset to first page when enabling or reconfiguring
+            this._currentPage = 0;
+            
+            // If we have a dataProvider, we're in server-side mode
+            if (this._pagingOptions.dataProvider) {
+                this._log('info', 'Server-side paging mode enabled');
+                // Initialize with empty data - will be populated by first dataProvider call
+                this._totalRecords = 0;
+                this._windowStart = 0;
+                
+                // Load initial data - this will trigger render automatically
+                this._loadServerSideWindow();
+            } else {
+                this._log('info', 'Client-side paging mode enabled');
+                // Set total records from current dm
+                if (this.dm) {
+                    this._totalRecords = this.dm.toRecordset().length;
+                }
+                
+                // Trigger render for client-side paging
+                this._requestRender();
+            }
+            return this;
+        }
+
+        /**
+         * Appends new rows to the DOM below the current content.
+         * @private
+         * @param {Array} newData - Array of data records to append
+         */
+        _appendRowsToDOM(newData) {
+            this._log('debug', 'Appending rows to DOM', { recordCount: newData.length });
+            
+            // Find the container and the load more control
+            const container = this._options.displayMode === 'grid' ? 
+                this._bodyEl.querySelector('tbody') : 
+                this._bodyEl.querySelector('ul');
+            
+            if (!container) {
+                this._log('error', 'Container not found for appending rows');
+                return;
+            }
+            
+            // Find the load more control to insert before it
+            const loadMoreControl = container.querySelector('[data-action="more"]');
+            
+            // Create and insert new rows
+            newData.forEach(row => {
+                const rowElement = this._createRowElement(row);
+                if (loadMoreControl) {
+                    container.insertBefore(rowElement, loadMoreControl);
+                } else {
+                    container.appendChild(rowElement);
+                }
+            });
+        }
+
+        /**
+         * Prepends new rows to the DOM above the current content.
+         * @private
+         * @param {Array} newData - Array of data records to prepend
+         */
+        _prependRowsToDOM(newData) {
+            this._log('debug', 'Prepending rows to DOM', { recordCount: newData.length });
+            
+            // Find the container and the load previous control
+            const container = this._options.displayMode === 'grid' ? 
+                this._bodyEl.querySelector('tbody') : 
+                this._bodyEl.querySelector('ul');
+            
+            if (!container) {
+                this._log('error', 'Container not found for prepending rows');
+                return;
+            }
+            
+            // Find the load previous control or the first data row
+            const loadPrevControl = container.querySelector('[data-action="previous"]');
+            const insertPoint = loadPrevControl ? loadPrevControl.nextSibling : container.firstChild;
+            
+            // Create and insert new rows in reverse order to maintain proper order
+            newData.reverse().forEach(row => {
+                const rowElement = this._createRowElement(row);
+                if (insertPoint) {
+                    container.insertBefore(rowElement, insertPoint);
+                } else {
+                    container.appendChild(rowElement);
+                }
+            });
+        }
+
+        /**
+         * Updates the visibility of paging controls based on current state.
+         * @private
+         */
+        _updatePagingControls() {
+            this._log('debug', 'Updating paging controls');
+            
+            const container = this._options.displayMode === 'grid' ? 
+                this._bodyEl.querySelector('tbody') : 
+                this._bodyEl.querySelector('ul');
+            
+            if (!container) {
+                this._log('error', 'Container not found for updating paging controls');
+                return;
+            }
+            
+            // Update load previous control
+            const loadPrevControl = container.querySelector('[data-action="previous"]');
+            if (this._windowStart > 0) {
+                if (!loadPrevControl) {
+                    const newPrevControl = this._createPagingControl('previous', this._options.displayMode);
+                    container.insertBefore(newPrevControl, container.firstChild);
+                }
+            } else {
+                if (loadPrevControl) {
+                    loadPrevControl.remove();
+                }
+            }
+            
+            // Update load more control
+            const loadMoreControl = container.querySelector('[data-action="more"]');
+            if (this._hasMorePages()) {
+                if (!loadMoreControl) {
+                    const newMoreControl = this._createPagingControl('more', this._options.displayMode);
+                    container.appendChild(newMoreControl);
+                }
+            } else {
+                if (loadMoreControl) {
+                    loadMoreControl.remove();
+                }
+            }
+        }
+
+        /**
+         * Creates a single row element from data.
+         * @private
+         * @param {Object} row - The data row object
+         * @returns {HTMLElement} The created row element
+         */
+        _createRowElement(row) {
+            const element = this._options.displayMode === 'grid' ? 
+                this._createGridRowElement(row) : 
+                this._createListRowElement(row);
+            
+            // Add the new row to the row map
+            const publicId = this._getPublicIdFromRow(row);
+            const internalId = this._getInternalIdFromRow(row);
+            
+            // Use a high base for virtual pagination keys to avoid conflicts with main rendering indices
+            const virtualKey = 10000 + internalId;
+            
+            // Set the virtual key as the data-index attribute
+            element.setAttribute('data-index', virtualKey);
+            
+            this._rowMap.set(virtualKey, {
+                internalId: internalId,
+                publicId: publicId,
+                data: row,
+                element: element
+            });
+            
+            return element;
+        }
+
+        /**
+         * Creates a grid row element (tr) from data.
+         * @private
+         * @param {Object} row - The data row object
+         * @returns {HTMLElement} The created tr element
+         */
+        _createGridRowElement(row) {
+            const tr = document.createElement('tr');
+            tr.className = 'jw-listbox__row';
+            
+            // Add data attributes
+            const publicId = this._getPublicIdFromRow(row);
+            const internalId = this._getInternalIdFromRow(row);
+            
+            tr.setAttribute('data-public-id', publicId);
+            tr.setAttribute('data-internal-id', internalId);
+            // Note: data-index will be set by _createRowElement with virtual key
+            
+            // Create cells for each field
+            const fieldNames = Object.keys(row);
+            fieldNames.forEach(fieldName => {
+                const td = document.createElement('td');
+                td.className = 'jw-listbox__cell';
+                td.setAttribute('data-field', fieldName);
+                td.innerHTML = this._formatCellValue(fieldName, row[fieldName]);
+                tr.appendChild(td);
+            });
+            
+            return tr;
+        }
+
+        /**
+         * Creates a list row element (li) from data.
+         * @private
+         * @param {Object} row - The data row object
+         * @returns {HTMLElement} The created li element
+         */
+        _createListRowElement(row) {
+            const li = document.createElement('li');
+            li.className = 'jw-listbox__row';
+            
+            // Add data attributes
+            const publicId = this._getPublicIdFromRow(row);
+            const internalId = this._getInternalIdFromRow(row);
+            
+            li.setAttribute('data-public-id', publicId);
+            li.setAttribute('data-internal-id', internalId);
+            // Note: data-index will be set by _createRowElement with virtual key
+            
+            // Render content using template
+            li.innerHTML = this._renderRowContent(row);
+            
+            return li;
+        }
+
+        /**
+         * Gets the public ID from a data row.
+         * @private
+         * @param {Object} row - The data row object
+         * @returns {*} The public ID
+         */
+        _getPublicIdFromRow(row) {
+            return this._options.idField ? row[this._options.idField] : row;
+        }
+
+        /**
+         * Gets or assigns an internal ID from a data row.
+         * @private
+         * @param {Object} row - The data row object
+         * @returns {number} The internal ID
+         */
+        _getInternalIdFromRow(row) {
+            // For virtual pagination, we need to create internal IDs dynamically
+            // Check if this row already has an internal ID in the row map
+            const publicId = this._getPublicIdFromRow(row);
+            
+            // Look for existing internal ID in the row map
+            for (const [internalId, rowData] of this._rowMap) {
+                if (rowData.publicId === publicId) {
+                    return internalId;
+                }
+            }
+            
+            // Create a new internal ID for this row
+            const internalId = ++this._internalIdCounter;
+            return internalId;
+        }
+
+        /**
+         * Gets row data from the row map, handling both index-based and internalId-based keys.
+         * @private
+         * @param {number} internalId - The internal ID of the row
+         * @param {number} index - The index of the row (may be null for virtual pagination)
+         * @returns {Object|null} The row data object
+         */
+        _getRowDataFromMap(internalId, index) {
+            // First try to get by index (for main rendering rows)
+            if (index !== null && !isNaN(index) && this._rowMap.has(index)) {
+                return this._rowMap.get(index);
+            }
+            
+            // Then try to get by internalId (for virtual pagination rows)
+            if (this._rowMap.has(internalId)) {
+                return this._rowMap.get(internalId);
+            }
+            
+            // If not found by either key, search by internalId in the data
+            for (const [key, rowData] of this._rowMap) {
+                if (rowData.internalId === internalId) {
+                    return rowData;
+                }
+            }
+            
+            // Debug logging
+            console.log(`_getRowDataFromMap: Could not find row data for internalId=${internalId}, index=${index}`);
+            console.log(`Row map keys:`, Array.from(this._rowMap.keys()));
+            
+            return null;
         }
     }
 
